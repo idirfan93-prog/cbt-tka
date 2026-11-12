@@ -1,6 +1,5 @@
 const EduApp = (function () {
   const state = {
-    selectedRoleHint: 'siswa',
     user: null,
     masterConfig: [],
     sekolahList: [],
@@ -658,13 +657,16 @@ const EduApp = (function () {
       EduApi.ExamStorage.clearDraft(state.user.user_id, jadwalId);
       state.activeExam = null;
 
-      const isSurvey = String(result.mode_penilaian || '').toUpperCase() === 'SURVEI';
+      const modeNilai = String(result.mode_penilaian || 'AKADEMIK').toUpperCase();
+      const isSurveyOnly = modeNilai === 'SURVEI';
+      const isCombined = modeNilai === 'KOMBINASI';
       const summaryHtml =
         '<div style="text-align:center;padding:12px 0;">' +
           '<p style="font-size:0.95rem;color:#475569;margin-bottom:10px;">Asesmen <strong>' + EduDashboard.escapeHtml(namaUjian) + '</strong> telah tercatat di server.</p>' +
-          (isSurvey
+          (isSurveyOnly
             ? '<div class="status-badge aktif" style="font-size:0.95rem;padding:8px 18px;">Respons Survei Berhasil Direkam</div>'
-            : '<div style="font-size:2.4rem;font-weight:800;color:#1d63ff;">' + EduDashboard.escapeHtml(result.skor_akhir) + '</div><small style="color:#64748b;">Skor Akhir Anda</small>') +
+            : '<div style="font-size:2.4rem;font-weight:800;color:#1d63ff;">' + EduDashboard.escapeHtml(result.skor_akhir) + '</div><small style="color:#64748b;">Skor Akademik Akhir</small>' +
+              (isCombined ? '<div style="margin-top:12px;"><span class="status-badge aktif">Respons Survei Karakter / Sulingjar Ikut Terekam</span></div>' : '')) +
         '</div>';
 
       openModal('Ujian Selesai', summaryHtml, 'Kembali ke Daftar Ujian', function () {
@@ -1190,8 +1192,9 @@ const EduApp = (function () {
           '<div class="form-group"><label>Kelas Target</label><input id="f-kelas" class="form-control" value="' + EduDashboard.escapeHtml(rec.kelas || '') + '" placeholder="Misal: 5 / 6 / Semua" /></div>' +
           '<div class="form-group"><label>Durasi (Menit)</label><input type="number" id="f-durasi_menit" class="form-control" value="' + EduDashboard.escapeHtml(rec.durasi_menit || 60) + '" /></div>' +
           '<div class="form-group full"><label>Mode Penilaian</label><select id="f-mode_penilaian" class="form-control">' +
-            '<option value="AKADEMIK"' + (rec.mode_penilaian !== 'SURVEI' ? ' selected' : '') + '>Skor Akademik (0 - 100)</option>' +
-            '<option value="SURVEI"' + (rec.mode_penilaian === 'SURVEI' ? ' selected' : '') + '>Profil / Skala Survei (Karakter / Sulingjar)</option>' +
+            '<option value="AKADEMIK"' + (rec.mode_penilaian === 'AKADEMIK' ? ' selected' : '') + '>Skor Akademik Murni (0 - 100)</option>' +
+            '<option value="KOMBINASI"' + (rec.mode_penilaian === 'KOMBINASI' ? ' selected' : '') + '>Kombinasi (Akademik + Survei Karakter / Sulingjar dalam 1 Paket)</option>' +
+            '<option value="SURVEI"' + (rec.mode_penilaian === 'SURVEI' ? ' selected' : '') + '>Survei Murni (Karakter / Sulingjar)</option>' +
           '</select></div>' +
         '</div>';
 
@@ -1551,12 +1554,9 @@ const EduApp = (function () {
 
   /* ================= EVENT BINDINGS ================= */
   function bindEvents() {
-    document.querySelectorAll('.role-pill').forEach(function (pill) {
-      pill.addEventListener('click', function () {
-        document.querySelectorAll('.role-pill').forEach(function (p) { p.classList.remove('active'); });
-        pill.classList.add('active');
-        state.selectedRoleHint = pill.getAttribute('data-role') || 'siswa';
-      });
+    $('btn-toggle-setup-password').addEventListener('click', function () {
+      const inp = $('setup-password');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
     });
 
     $('btn-toggle-password').addEventListener('click', function () {
@@ -1603,7 +1603,7 @@ const EduApp = (function () {
         const identifier = $('login-identifier').value.trim();
         const password = $('login-password').value;
         const remember = $('login-remember').checked;
-        const res = await EduApi.login(identifier, password, state.selectedRoleHint);
+        const res = await EduApi.login(identifier, password);
         EduApi.saveSession(res.token, res.user, remember);
         state.user = res.user;
         await routeAuthenticatedUser();
