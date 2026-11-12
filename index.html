@@ -101,6 +101,9 @@
             <div class="input-group">
               <i data-lucide="lock" class="input-icon"></i>
               <input type="password" id="setup-password" placeholder="Kata Sandi (Min. 6 karakter)" minlength="6" required />
+              <button type="button" id="btn-toggle-setup-password" class="input-action-btn" aria-label="Tampilkan kata sandi">
+                <i data-lucide="eye"></i>
+              </button>
             </div>
             <button type="submit" id="btn-setup-admin" class="btn-primary-gradient">
               <i data-lucide="check-circle-2"></i>
@@ -111,7 +114,6 @@
 
         <div id="standard-login-box">
           <h2 class="login-heading">Masuk ke CBT <span>EduTryout</span></h2>
-          <p class="login-subheading">Satu akun untuk Siswa, Guru, dan Admin</p>
 
           <div id="login-alert" class="inline-alert hidden" role="alert"></div>
 
@@ -142,29 +144,6 @@
               <span>Masuk</span>
             </button>
           </form>
-
-          <div class="auth-divider"><span>atau</span></div>
-
-          <div class="role-selector-panel">
-            <p class="role-selector-title">
-              <i data-lucide="users"></i>
-              <span>Akses sesuai peran Anda</span>
-            </p>
-            <div class="role-pills-grid">
-              <button type="button" class="role-pill active" data-role="siswa">
-                <span class="role-dot blue"><i data-lucide="user"></i></span>
-                <span>Siswa</span>
-              </button>
-              <button type="button" class="role-pill" data-role="guru">
-                <span class="role-dot purple"><i data-lucide="presentation"></i></span>
-                <span>Guru</span>
-              </button>
-              <button type="button" class="role-pill" data-role="admin">
-                <span class="role-dot orange"><i data-lucide="settings"></i></span>
-                <span>Admin</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
