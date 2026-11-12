@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CBT EduTryout — Asesmen & Tryout Digital</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="app-loader" class="app-loader hidden" aria-hidden="true">
+    <div class="loader-spinner"></div>
+    <p id="app-loader-text">Memuat layanan CBT EduTryout...</p>
+  </div>
+
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <section id="view-login" class="view-section login-screen">
+    <div class="login-bg-decor"></div>
+    <div class="login-container">
+      <div class="login-hero">
+        <div class="brand-lockup">
+          <div class="brand-emblem">
+            <i data-lucide="graduation-cap"></i>
+          </div>
+          <h1 class="brand-title">CBT Edu<span>Tryout</span></h1>
+          <p class="brand-tagline">Latihan Tryout  |  TKA  |  Asesmen Digital</p>
+        </div>
+
+        <div class="feature-pills">
+          <div class="feature-pill">
+            <span class="pill-icon orange"><i data-lucide="target"></i></span>
+            <span>Akurat</span>
+          </div>
+          <div class="feature-pill">
+            <span class="pill-icon purple"><i data-lucide="zap"></i></span>
+            <span>Cepat</span>
+          </div>
+          <div class="feature-pill">
+            <span class="pill-icon blue"><i data-lucide="bar-chart-3"></i></span>
+            <span>Berbasis Analisis</span>
+          </div>
+        </div>
+
+        <div class="hero-illustration" aria-hidden="true">
+          <svg viewBox="0 0 520 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="330" y="75" width="130" height="145" rx="12" fill="#DCE8FF" />
+            <polygon points="320,80 395,35 470,80" fill="#B8D0FF" />
+            <rect x="378" y="155" width="34" height="65" rx="6" fill="#9BBBF9" />
+            <line x1="395" y1="12" x2="395" y2="38" stroke="#648DE5" stroke-width="3" />
+            <rect x="395" y="14" width="26" height="16" rx="2" fill="#EF4444" />
+            <rect x="395" y="22" width="26" height="8" fill="#FFFFFF" />
+            <rect x="145" y="45" width="175" height="115" rx="16" fill="#E8F0FE" stroke="#FFFFFF" stroke-width="4" />
+            <rect x="168" y="68" width="22" height="22" rx="6" fill="#60A5FA" />
+            <rect x="200" y="74" width="95" height="10" rx="5" fill="#93C5FD" />
+            <rect x="168" y="100" width="22" height="22" rx="6" fill="#60A5FA" />
+            <rect x="200" y="106" width="80" height="10" rx="5" fill="#93C5FD" />
+            <rect x="168" y="132" width="22" height="22" rx="6" fill="#3B82F6" />
+            <rect x="200" y="138" width="90" height="10" rx="5" fill="#93C5FD" />
+            <ellipse cx="260" cy="268" rx="235" ry="18" fill="#D5E3FA" />
+            <rect x="155" y="168" width="125" height="82" rx="10" fill="#2563EB" />
+            <circle cx="217" cy="209" r="14" fill="#60A5FA" />
+            <rect x="42" y="226" width="88" height="16" rx="6" fill="#3B82F6" />
+            <rect x="34" y="242" width="98" height="18" rx="6" fill="#F59E0B" />
+            <rect x="368" y="210" width="34" height="48" rx="8" fill="#8B5CF6" />
+            <rect x="374" y="182" width="7" height="30" rx="3" fill="#F59E0B" />
+            <rect x="385" y="178" width="7" height="34" rx="3" fill="#3B82F6" />
+            <rect x="418" y="214" width="36" height="44" rx="10" fill="#F1F5F9" />
+            <path d="M436 214C436 192 414 182 408 196C420 202 430 208 436 214Z" fill="#22C55E" />
+            <path d="M436 214C436 188 458 178 464 194C452 200 442 208 436 214Z" fill="#16A34A" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="login-card">
+        <div class="login-card-badge">
+          <i data-lucide="graduation-cap"></i>
+        </div>
+
+        <div id="first-admin-setup-box" class="setup-box hidden">
+          <div class="setup-banner">
+            <i data-lucide="shield-check"></i>
+            <div>
+              <strong>Aktivasi Database Awal</strong>
+              <p>Spreadsheet masih kosong. Buat akun Admin utama pertama Anda.</p>
+            </div>
+          </div>
+          <form id="setup-admin-form" class="auth-form">
+            <div class="input-group">
+              <i data-lucide="user-plus" class="input-icon"></i>
+              <input type="text" id="setup-nama" placeholder="Nama Lengkap Admin" required />
+            </div>
+            <div class="input-group">
+              <i data-lucide="at-sign" class="input-icon"></i>
+              <input type="text" id="setup-username" placeholder="Username / Email Admin" required />
+            </div>
+            <div class="input-group">
+              <i data-lucide="lock" class="input-icon"></i>
+              <input type="password" id="setup-password" placeholder="Kata Sandi (Min. 6 karakter)" minlength="6" required />
+            </div>
+            <button type="submit" id="btn-setup-admin" class="btn-primary-gradient">
+              <i data-lucide="check-circle-2"></i>
+              <span>Buat Akun Admin & Masuk</span>
+            </button>
+          </form>
+        </div>
+
+        <div id="standard-login-box">
+          <h2 class="login-heading">Masuk ke CBT <span>EduTryout</span></h2>
+          <p class="login-subheading">Satu akun untuk Siswa, Guru, dan Admin</p>
+
+          <div id="login-alert" class="inline-alert hidden" role="alert"></div>
+
+          <form id="login-form" class="auth-form">
+            <div class="input-group">
+              <i data-lucide="user" class="input-icon"></i>
+              <input type="text" id="login-identifier" placeholder="Username / Email / NISN" autocomplete="username" required />
+            </div>
+
+            <div class="input-group">
+              <i data-lucide="lock" class="input-icon"></i>
+              <input type="password" id="login-password" placeholder="Kata Sandi" autocomplete="current-password" required />
+              <button type="button" id="btn-toggle-password" class="input-action-btn" aria-label="Tampilkan kata sandi">
+                <i data-lucide="eye"></i>
+              </button>
+            </div>
+
+            <div class="login-options-row">
+              <label class="checkbox-label">
+                <input type="checkbox" id="login-remember" />
+                <span>Ingat saya</span>
+              </label>
+              <button type="button" id="link-forgot-password" class="text-link-btn">Lupa kata sandi?</button>
+            </div>
+
+            <button type="submit" id="btn-login-submit" class="btn-primary-gradient">
+              <i data-lucide="log-in"></i>
+              <span>Masuk</span>
+            </button>
+          </form>
+
+          <div class="auth-divider"><span>atau</span></div>
+
+          <div class="role-selector-panel">
+            <p class="role-selector-title">
+              <i data-lucide="users"></i>
+              <span>Akses sesuai peran Anda</span>
+            </p>
+            <div class="role-pills-grid">
+              <button type="button" class="role-pill active" data-role="siswa">
+                <span class="role-dot blue"><i data-lucide="user"></i></span>
+                <span>Siswa</span>
+              </button>
+              <button type="button" class="role-pill" data-role="guru">
+                <span class="role-dot purple"><i data-lucide="presentation"></i></span>
+                <span>Guru</span>
+              </button>
+              <button type="button" class="role-pill" data-role="admin">
+                <span class="role-dot orange"><i data-lucide="settings"></i></span>
+                <span>Admin</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-exam" class="view-section exam-screen hidden">
+    <header class="exam-topbar">
+      <div class="exam-topbar-left">
+        <div class="topbar-brand">
+          <i data-lucide="graduation-cap"></i>
+          <span>CBT Edu<span>Tryout</span></span>
+        </div>
+        <span class="topbar-divider"></span>
+        <div id="exam-title-badge" class="exam-context-pill">
+          <i data-lucide="file-text"></i>
+          <span id="exam-header-title">Daftar Asesmen Tersedia</span>
+        </div>
+      </div>
+
+      <div class="exam-topbar-right">
+        <button type="button" id="btn-fullscreen" class="icon-square-btn" title="Layar Penuh">
+          <i data-lucide="maximize"></i>
+        </button>
+        <div class="user-chip">
+          <span class="user-chip-avatar"><i data-lucide="user"></i></span>
+          <div class="user-chip-info">
+            <strong id="exam-user-name">Peserta</strong>
+            <small id="exam-user-class">-</small>
+          </div>
+        </div>
+        <button type="button" id="btn-exam-logout" class="icon-square-btn danger" title="Keluar">
+          <i data-lucide="log-out"></i>
+        </button>
+      </div>
+    </header>
+
+    <div id="exam-lobby" class="exam-lobby-container">
+      <div class="lobby-header">
+        <div>
+          <h2>Pilih Jadwal Asesmen / Tryout Aktif</h2>
+          <p>Jawaban tersimpan otomatis di perangkat Anda meskipun koneksi terputus atau laptop dimatikan.</p>
+        </div>
+        <button type="button" id="btn-refresh-exams" class="btn-outline">
+          <i data-lucide="refresh-cw"></i>
+          <span>Muat Ulang Jadwal</span>
+        </button>
+      </div>
+
+      <div id="exam-schedule-list" class="exam-cards-grid"></div>
+
+      <div id="exam-lobby-empty" class="empty-state-card hidden">
+        <div class="empty-icon"><i data-lucide="calendar-off"></i></div>
+        <h3>Belum Ada Jadwal Ujian Aktif</h3>
+        <p>Saat ini belum ada paket tryout atau survei yang dijadwalkan untuk akun Anda.</p>
+      </div>
+    </div>
+
+    <div id="exam-workspace" class="exam-workspace hidden">
+      <div class="exam-grid">
+        <article class="exam-question-card">
+          <div class="question-meta-bar">
+            <div class="question-badges">
+              <span id="q-number-badge" class="badge-solid-blue">Soal No. 1</span>
+              <span id="q-type-badge" class="badge-soft-purple">Pilihan Ganda</span>
+              <span id="q-materi-badge" class="badge-soft-slate hidden"></span>
+            </div>
+            <div id="exam-sync-status" class="sync-pill">
+              <span class="sync-dot"></span>
+              <span id="exam-sync-text">Tersimpan Lokal</span>
+            </div>
+          </div>
+
+          <div id="q-stimulus-box" class="question-stimulus hidden">
+            <div id="q-stimulus-text" class="stimulus-passage"></div>
+            <figure id="q-stimulus-figure" class="stimulus-figure hidden">
+              <img id="q-stimulus-img" src="" alt="Ilustrasi Soal" />
+            </figure>
+          </div>
+
+          <div id="q-question-text" class="question-stem"></div>
+
+          <div id="q-options-container" class="options-wrapper"></div>
+        </article>
+
+        <aside class="exam-sidebar">
+          <div class="timer-card">
+            <div class="timer-info">
+              <span class="timer-icon"><i data-lucide="clock"></i></span>
+              <div>
+                <small>Sisa Waktu</small>
+                <div id="exam-timer-display" class="timer-digits">00:00:00</div>
+              </div>
+            </div>
+            <button type="button" id="btn-force-sync" class="timer-sync-btn" title="Sinkronkan Jawaban Sekarang">
+              <i data-lucide="cloud-upload"></i>
+            </button>
+          </div>
+
+          <div class="nav-grid-card">
+            <div class="nav-grid-header">
+              <h3><i data-lucide="layout-grid"></i> Navigasi Soal</h3>
+              <span id="nav-progress-count">0 dari 0</span>
+            </div>
+
+            <div id="exam-nav-grid" class="question-num-grid"></div>
+
+            <div class="nav-legend">
+              <div class="legend-item"><span class="legend-box answered"></span> Sudah dijawab</div>
+              <div class="legend-item"><span class="legend-box unanswered"></span> Belum dijawab</div>
+              <div class="legend-item"><span class="legend-box current"></span> Soal sekarang</div>
+              <div class="legend-item"><span class="legend-box doubtful"></span> Ditandai ragu-ragu</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="exam-bottombar">
+        <button type="button" id="btn-prev-question" class="btn-nav-secondary">
+          <i data-lucide="chevron-left"></i>
+          <span>Soal Sebelumnya</span>
+        </button>
+
+        <label class="doubtful-toggle">
+          <input type="checkbox" id="chk-doubtful" />
+          <span class="doubtful-box"><i data-lucide="check"></i></span>
+          <span>Tandai Ragu-ragu</span>
+        </label>
+
+        <div class="bottombar-right-actions">
+          <button type="button" id="btn-next-question" class="btn-nav-primary">
+            <span>Soal Berikutnya</span>
+            <i data-lucide="chevron-right"></i>
+          </button>
+          <button type="button" id="btn-finish-exam" class="btn-nav-finish hidden">
+            <i data-lucide="send"></i>
+            <span>Selesai Ujian</span>
+          </button>
+        </div>
+      </footer>
+    </div>
+  </section>
+
+  <section id="view-portal" class="view-section portal-screen hidden">
+    <header class="portal-topbar">
+      <div class="portal-topbar-left">
+        <button type="button" id="btn-sidebar-toggle" class="icon-square-btn mobile-only" aria-label="Menu">
+          <i data-lucide="menu"></i>
+        </button>
+        <div class="topbar-brand">
+          <i data-lucide="graduation-cap"></i>
+          <span>CBT Edu<span>Tryout</span></span>
+        </div>
+        <span id="portal-role-badge" class="portal-role-pill">
+          <i data-lucide="crown"></i>
+          <span>Portal Admin</span>
+        </span>
+      </div>
+
+      <div class="portal-topbar-right">
+        <button type="button" id="btn-portal-refresh" class="icon-square-btn" title="Segarkan Data">
+          <i data-lucide="refresh-cw"></i>
+        </button>
+        <div class="user-chip">
+          <span class="user-chip-avatar"><i data-lucide="user"></i></span>
+          <div class="user-chip-info">
+            <strong id="portal-user-name">Pengguna</strong>
+            <small id="portal-user-role">Admin</small>
+          </div>
+        </div>
+        <button type="button" id="btn-portal-logout" class="icon-square-btn danger" title="Keluar">
+          <i data-lucide="log-out"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="portal-body">
+      <aside id="portal-sidebar" class="portal-sidebar">
+        <div class="sidebar-profile-card">
+          <div class="sidebar-avatar">
+            <i data-lucide="user"></i>
+            <span class="online-indicator"></span>
+          </div>
+          <div class="sidebar-profile-text">
+            <strong id="sidebar-user-name">Admin</strong>
+            <small id="sidebar-user-sub">Wilayah Kerja</small>
+          </div>
+        </div>
+
+        <nav id="portal-nav-menu" class="sidebar-menu" aria-label="Navigasi Utama"></nav>
+
+        <div class="sidebar-footer-art" aria-hidden="true">
+          <svg viewBox="0 0 220 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="58" y="24" width="96" height="62" rx="8" fill="#60A5FA" />
+            <circle cx="106" cy="55" r="11" fill="#EFF6FF" />
+            <rect x="45" y="84" width="122" height="8" rx="4" fill="#DBEAFE" />
+            <rect x="14" y="72" width="44" height="10" rx="4" fill="#3B82F6" />
+            <rect x="10" y="82" width="50" height="10" rx="4" fill="#F59E0B" />
+            <rect x="164" y="64" width="24" height="28" rx="6" fill="#E2E8F0" />
+            <path d="M176 64C176 48 160 42 156 52C164 56 171 60 176 64Z" fill="#22C55E" />
+            <path d="M176 64C176 46 192 40 196 50C188 54 181 60 176 64Z" fill="#16A34A" />
+          </svg>
+        </div>
+      </aside>
+
+      <main class="portal-main">
+        <div id="tab-beranda" class="portal-tab-view">
+          <div class="welcome-banner">
+            <div>
+              <h1 id="welcome-title">Selamat Datang!</h1>
+              <p id="welcome-subtitle">Kelola data pelaksanaan tryout, TKA, dan asesmen digital secara terpusat.</p>
+            </div>
+            <div id="welcome-context-pill" class="context-badge-card">
+              <i data-lucide="calendar"></i>
+              <span id="welcome-context-text">-</span>
+            </div>
+          </div>
+
+          <div id="portal-kpi-grid" class="kpi-grid"></div>
+
+          <div id="portal-widgets-container" class="widgets-layout"></div>
+        </div>
+
+        <div id="tab-crud" class="portal-tab-view hidden">
+          <div class="crud-header-card">
+            <div>
+              <h2 id="crud-title">Manajemen Data</h2>
+              <p id="crud-subtitle">Kelola data secara dinamis.</p>
+            </div>
+            <div class="crud-actions-bar">
+              <div class="search-box">
+                <i data-lucide="search"></i>
+                <input type="text" id="crud-search" placeholder="Cari data..." />
+              </div>
+              <select id="crud-filter" class="filter-select hidden"></select>
+              <button type="button" id="btn-crud-import" class="btn-outline hidden">
+                <i data-lucide="upload"></i>
+                <span>Impor Massal</span>
+              </button>
+              <button type="button" id="btn-crud-print" class="btn-outline hidden">
+                <i data-lucide="printer"></i>
+                <span>Cetak Laporan</span>
+              </button>
+              <button type="button" id="btn-crud-add" class="btn-primary-solid">
+                <i data-lucide="plus"></i>
+                <span>Tambah Data</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead id="crud-table-head"></thead>
+                <tbody id="crud-table-body"></tbody>
+              </table>
+            </div>
+            <div id="crud-empty-state" class="empty-state-card compact hidden">
+              <div class="empty-icon"><i data-lucide="inbox"></i></div>
+              <h3 id="crud-empty-title">Belum Ada Data Tersimpan</h3>
+              <p id="crud-empty-desc">Klik tombol "Tambah Data" di atas untuk mulai mengisi data secara mandiri.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <div id="global-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modal-title">Formulir Data</h3>
+        <button type="button" id="btn-modal-close" class="icon-square-btn" aria-label="Tutup">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+      <div id="modal-footer" class="modal-footer">
+        <button type="button" id="btn-modal-cancel" class="btn-outline">Batal</button>
+        <button type="button" id="btn-modal-save" class="btn-primary-solid">Simpan Data</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script src="dashboard.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
