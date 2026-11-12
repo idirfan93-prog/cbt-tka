@@ -98,11 +98,10 @@ const EduApi = (function () {
     return request('setupFirstAdmin', payload);
   }
 
-  function login(identifier, password, roleHint) {
+  function login(identifier, password) {
     return request('login', {
       identifier: identifier,
-      password: password,
-      roleHint: roleHint
+      password: password
     });
   }
 
