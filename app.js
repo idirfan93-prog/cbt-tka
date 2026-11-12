@@ -1846,7 +1846,7 @@ const EduApp = (function () {
           const preferredSheet = isSoal ? 'Template_Bank_Soal' : isUsers ? 'Template_Data_Siswa' : wb.SheetNames[0];
           const sheetName = wb.SheetNames.indexOf(preferredSheet) !== -1 ? preferredSheet : wb.SheetNames[0];
           const ws = wb.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
           parsedFileMatrix = rows.filter(function (r) {
             return Array.isArray(r) && r.some(function (cell) {
               return String(cell || '').trim() !== '';
