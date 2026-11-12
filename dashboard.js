@@ -5,12 +5,16 @@ const EduDashboard = (function () {
     if (str === null || str === undefined) {
       return '';
     }
-    return String(str)
-      .replace(/&/g, '&')
-      .replace(/</g, '<')
-      .replace(/>/g, '>')
-      .replace(/"/g, '"')
-      .replace(/'/g, ''');
+    const entityMap = {
+      '&': '&' + 'amp;',
+      '<': '&' + 'lt;',
+      '>': '&' + 'gt;',
+      '"': '&' + 'quot;',
+      "'": '&' + '#39;'
+    };
+    return String(str).replace(/[&<>"']/g, function (ch) {
+      return entityMap[ch];
+    });
   }
 
   function destroyCharts() {
