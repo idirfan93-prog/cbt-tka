@@ -127,6 +127,72 @@ const EduApp = (function () {
     return found ? found.nama_sekolah : sekolahId;
   }
 
+  function normalizeDriveImageUrl(rawUrl) {
+    const trimmed = String(rawUrl || '').trim();
+    if (!trimmed) {
+      return '';
+    }
+    const filePathMatch = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (filePathMatch && filePathMatch[1]) {
+      return 'https://drive.google.com/thumbnail?id=' + filePathMatch[1] + '&sz=w800';
+    }
+    const queryIdMatch = trimmed.match(/drive\.google\.com\/(?:open|uc)\?.*?id=([a-zA-Z0-9_-]+)/);
+    if (queryIdMatch && queryIdMatch[1]) {
+      return 'https://drive.google.com/thumbnail?id=' + queryIdMatch[1] + '&sz=w800';
+    }
+    return trimmed;
+  }
+
+  function compressImageToWebpDataUrl(file) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function (ev) {
+        const img = new Image();
+        img.onload = function () {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          let maxWidth = 800;
+          let quality = 0.78;
+          let dataUrl = '';
+
+          while (quality >= 0.42) {
+            const scale = img.width > maxWidth ? maxWidth / img.width : 1;
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            dataUrl = canvas.toDataURL('image/webp', quality);
+            if (dataUrl.indexOf('data:image/webp') !== 0) {
+              dataUrl = canvas.toDataURL('image/jpeg', quality);
+            }
+            if (dataUrl.length <= 45000) {
+              break;
+            }
+            quality -= 0.12;
+            maxWidth = Math.max(520, maxWidth - 100);
+          }
+
+          if (dataUrl.length > 48000) {
+            reject(new Error('Ukuran gambar masih terlalu besar untuk sel Sheets. Gunakan gambar lebih sederhana atau link Google Drive.'));
+            return;
+          }
+
+          const approxKb = Math.max(1, Math.round((dataUrl.length * 0.75) / 1024));
+          resolve({ dataUrl: dataUrl, sizeKb: approxKb });
+        };
+        img.onerror = function () {
+          reject(new Error('File gambar tidak dapat dibaca.'));
+        };
+        img.src = ev.target.result;
+      };
+      reader.onerror = function () {
+        reject(new Error('Gagal membaca file dari perangkat.'));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function loadMasterContext(forceRefresh) {
     try {
       const res = await EduApi.getMasterConfig(forceRefresh);
@@ -463,7 +529,7 @@ const EduApp = (function () {
       stimBox.classList.remove('hidden');
       stimText.textContent = soal.stimulus_teks || '';
       if (soal.stimulus_gambar_url) {
-        stimImg.src = soal.stimulus_gambar_url;
+        stimImg.src = normalizeDriveImageUrl(soal.stimulus_gambar_url);
         stimFig.classList.remove('hidden');
       } else {
         stimFig.classList.add('hidden');
@@ -822,7 +888,7 @@ const EduApp = (function () {
       if (menuObj.entity !== 'Hasil_Ujian') {
         addBtn.classList.remove('hidden');
       }
-      if (menuObj.entity === 'Users' || menuObj.entity === 'Sekolah') {
+      if (menuObj.entity === 'Users' || menuObj.entity === 'Sekolah' || menuObj.entity === 'Bank_Soal') {
         importBtn.classList.remove('hidden');
       }
       if (menuObj.printMode || menuObj.entity === 'Hasil_Ujian') {
@@ -1298,13 +1364,25 @@ const EduApp = (function () {
         '</select></div>' +
         '<div class="form-group"><label>Lingkup Materi / Dimensi</label><select id="q-lingkup_materi_kode" class="form-control">' + materiOpts + '</select></div>' +
         '<div class="form-group full"><label>Stimulus / Bacaan Cerita (Opsional)</label><textarea id="q-stimulus_teks" class="form-control" rows="2">' + EduDashboard.escapeHtml(rec.stimulus_teks || '') + '</textarea></div>' +
-        '<div class="form-group full"><label>URL Gambar Ilustrasi Soal (Opsional)</label><input id="q-stimulus_gambar_url" class="form-control" value="' + EduDashboard.escapeHtml(rec.stimulus_gambar_url || '') + '" placeholder="https://..." /></div>' +
+        '<div class="form-group full">' +
+          '<label>Gambar Ilustrasi Soal (Link Google Drive Otomatis / Unggah & Kompres WebP)</label>' +
+          '<div style="display:flex;gap:8px;align-items:center;">' +
+            '<input id="q-stimulus_gambar_url" class="form-control" value="' + EduDashboard.escapeHtml(rec.stimulus_gambar_url || '') + '" placeholder="Tempel link Google Drive biasa atau pilih gambar..." />' +
+            '<button type="button" id="btn-q-pick-image" class="btn-outline" style="white-space:nowrap;"><i data-lucide="image"></i><span>Pilih & Kompres</span></button>' +
+            '<input type="file" id="q-image-file-input" accept="image/*" class="hidden" />' +
+          '</div>' +
+          '<div id="q-image-preview-box" class="' + (rec.stimulus_gambar_url ? '' : 'hidden') + '" style="margin-top:8px;padding:8px;border:1px dashed #cbd5e1;border-radius:10px;text-align:center;background:#f8fafc;">' +
+            '<img id="q-image-preview-img" src="' + EduDashboard.escapeHtml(rec.stimulus_gambar_url || '') + '" alt="Pratinjau Gambar" style="max-height:140px;max-width:100%;border-radius:6px;" />' +
+            '<div id="q-image-preview-info" style="font-size:0.78rem;color:#475569;margin-top:4px;">Pratinjau gambar soal aktif</div>' +
+          '</div>' +
+        '</div>' +
         '<div class="form-group full"><label>Pertanyaan</label><textarea id="q-pertanyaan" class="form-control" rows="2">' + EduDashboard.escapeHtml(rec.pertanyaan || '') + '</textarea></div>' +
         '<div id="q-dynamic-builder" class="form-group full"></div>' +
       '</div>';
 
     openModal(isEdit ? 'Edit Butir Soal' : 'Tambah Butir Soal', html, 'Simpan Soal', async function () {
       const built = extractQuestionBuilderData($('q-tipe_soal_kode').value, $('q-lingkup_materi_kode').value);
+      const normalizedImg = normalizeDriveImageUrl($('q-stimulus_gambar_url').value);
       const payload = {
         soal_id: rec.soal_id || '',
         paket_id: $('q-paket_id').value,
@@ -1312,7 +1390,7 @@ const EduApp = (function () {
         tipe_soal_kode: $('q-tipe_soal_kode').value,
         lingkup_materi_kode: $('q-lingkup_materi_kode').value,
         stimulus_teks: $('q-stimulus_teks').value.trim(),
-        stimulus_gambar_url: $('q-stimulus_gambar_url').value.trim(),
+        stimulus_gambar_url: normalizedImg,
         pertanyaan: $('q-pertanyaan').value.trim(),
         opsi_json: JSON.stringify(built.opsi),
         kunci_json: JSON.stringify(built.kunci),
@@ -1323,6 +1401,49 @@ const EduApp = (function () {
         return;
       }
       await submitCrudSave('Bank_Soal', isEdit ? 'update' : 'create', payload);
+    });
+
+    const urlInput = $('q-stimulus_gambar_url');
+    const previewBox = $('q-image-preview-box');
+    const previewImg = $('q-image-preview-img');
+    const previewInfo = $('q-image-preview-info');
+
+    urlInput.addEventListener('change', function () {
+      const converted = normalizeDriveImageUrl(urlInput.value);
+      if (converted !== urlInput.value.trim()) {
+        urlInput.value = converted;
+        showToast('Link Google Drive otomatis dikonversi ke format thumbnail ringan.', 'info');
+      }
+      if (converted) {
+        previewImg.src = converted;
+        previewInfo.textContent = 'Pratinjau gambar dari URL';
+        previewBox.classList.remove('hidden');
+      } else {
+        previewBox.classList.add('hidden');
+      }
+    });
+
+    $('btn-q-pick-image').addEventListener('click', function () {
+      $('q-image-file-input').click();
+    });
+
+    $('q-image-file-input').addEventListener('change', async function (ev) {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) {
+        return;
+      }
+      try {
+        previewInfo.textContent = 'Mengompres gambar ke WebP...';
+        previewBox.classList.remove('hidden');
+        const compressed = await compressImageToWebpDataUrl(file);
+        urlInput.value = compressed.dataUrl;
+        previewImg.src = compressed.dataUrl;
+        previewInfo.textContent = 'Terkompresi otomatis (' + compressed.sizeKb + ' KB • WebP siap simpan)';
+        showToast('Gambar berhasil dikompres menjadi ' + compressed.sizeKb + ' KB.', 'success');
+      } catch (err) {
+        previewBox.classList.add('hidden');
+        showToast(err.message, 'error');
+      }
     });
 
     const renderBuilderFields = function () {
@@ -1471,44 +1592,219 @@ const EduApp = (function () {
     };
   }
 
+  function parseImportedSoalRow(cols, paketId, fallbackNo) {
+    const tipe = String(cols[1] || 'PG').trim().toUpperCase();
+    const lingkup = String(cols[2] || '').trim().toUpperCase();
+    const stimulusTeks = String(cols[3] || '').trim();
+    const stimulusImg = normalizeDriveImageUrl(cols[4]);
+    const pertanyaan = String(cols[5] || '').trim();
+    const rawOpts = [cols[6], cols[7], cols[8], cols[9]].map(function (v) {
+      return v !== undefined && v !== null ? String(v).trim() : '';
+    });
+    const kunciRaw = String(cols[10] || '').trim();
+    const bobot = Number(cols[11]) > 0 ? Number(cols[11]) : 1;
+
+    let opsiObj = [];
+    let kunciObj = {};
+
+    if (tipe === 'PG') {
+      const letters = ['A', 'B', 'C', 'D'];
+      opsiObj = letters.map(function (ltr, idx) {
+        return { id: ltr, teks: rawOpts[idx] || '' };
+      });
+      kunciObj = { jawaban: (kunciRaw || 'A').toUpperCase() };
+    } else if (tipe === 'PGK_MCMA') {
+      opsiObj = rawOpts
+        .map(function (txt, idx) {
+          return { id: String(idx + 1), teks: txt };
+        })
+        .filter(function (o) {
+          return o.teks !== '';
+        });
+      const ansArr = kunciRaw
+        .split(',')
+        .map(function (s) {
+          return s.trim();
+        })
+        .filter(Boolean);
+      kunciObj = { jawaban: ansArr, mode_skor: 'PROPORSIONAL' };
+    } else if (tipe === 'PGK_BS') {
+      const baris = [];
+      const ansMap = {};
+      const keyParts = kunciRaw.split(',').map(function (s) {
+        return s.trim();
+      });
+      rawOpts.forEach(function (txt, idx) {
+        if (txt !== '') {
+          const pid = 'P' + (idx + 1);
+          baris.push({ id: pid, teks: txt });
+          const rawAns = String(keyParts[idx] || 'Benar').toLowerCase();
+          ansMap[pid] = rawAns === 'salah' || rawAns === 's' ? 'Salah' : 'Benar';
+        }
+      });
+      opsiObj = { kolom: ['Benar', 'Salah'], baris: baris };
+      kunciObj = { jawaban: ansMap, mode_skor: 'PROPORSIONAL' };
+    } else {
+      const defaultSurvey = [
+        { id: '1', teks: 'Sangat Tidak Setuju', skor: 1 },
+        { id: '2', teks: 'Tidak Setuju', skor: 2 },
+        { id: '3', teks: 'Setuju', skor: 3 },
+        { id: '4', teks: 'Sangat Setuju', skor: 4 }
+      ];
+      const hasCustomLabels = rawOpts.some(function (t) {
+        return t !== '';
+      });
+      opsiObj = hasCustomLabels
+        ? rawOpts
+            .map(function (t, i) {
+              return { id: String(i + 1), teks: t, skor: i + 1 };
+            })
+            .filter(function (o) {
+              return o.teks !== '';
+            })
+        : defaultSurvey;
+      kunciObj = {
+        dimensi: lingkup || 'UMUM',
+        arah: kunciRaw.toUpperCase() === 'NEGATIF' ? 'NEGATIF' : 'POSITIF'
+      };
+    }
+
+    return {
+      paket_id: paketId,
+      no_urut: Number(cols[0]) || fallbackNo,
+      tipe_soal_kode: tipe,
+      lingkup_materi_kode: lingkup,
+      stimulus_teks: stimulusTeks,
+      stimulus_gambar_url: stimulusImg,
+      pertanyaan: pertanyaan,
+      opsi_json: JSON.stringify(opsiObj),
+      kunci_json: JSON.stringify(kunciObj),
+      bobot: bobot
+    };
+  }
+
   function openBatchImportModal(entity) {
     const isUsers = entity === 'Users';
-    const guide = isUsers
-      ? 'Tempel data dari Excel/Sheets dengan format kolom dipisahkan Tab: <strong>Username/NISN [Tab] Nama Lengkap [Tab] Kelas [Tab] Password</strong>'
-      : 'Tempel data dari Excel/Sheets dengan format kolom dipisahkan Tab: <strong>ID Sekolah [Tab] Nama Sekolah [Tab] Kecamatan [Tab] Jenjang</strong>';
+    const isSoal = entity === 'Bank_Soal';
+    let parsedFileMatrix = null;
+
+    if (isSoal && (!state.paketList || state.paketList.length === 0)) {
+      showToast('Buat minimal 1 Paket Ujian terlebih dahulu sebelum mengimpor soal.', 'warning');
+      return;
+    }
+
+    const paketSelectHtml = isSoal
+      ? '<div class="form-group"><label>Pilih Paket Ujian Tujuan</label><select id="batch-target-paket" class="form-control">' +
+          state.paketList
+            .map(function (p) {
+              return '<option value="' + EduDashboard.escapeHtml(p.paket_id) + '">' + EduDashboard.escapeHtml(p.nama_ujian) + '</option>';
+            })
+            .join('') +
+        '</select></div>'
+      : '';
+
+    const guide = isSoal
+      ? 'Unggah file <strong>Template_Impor_Massal_CBT_EduTryout.xlsx</strong> (sheet <em>Template_Bank_Soal</em>) atau tempel baris dari Excel.'
+      : isUsers
+      ? 'Unggah file <strong>Template_Impor_Massal_CBT_EduTryout.xlsx</strong> (sheet <em>Template_Data_Siswa</em>) atau tempel baris dari Excel.'
+      : 'Unggah file Excel atau tempel baris data sekolah (ID Sekolah, Nama Sekolah, Kecamatan, Jenjang).';
+
+    const modalTitle = isSoal
+      ? 'Impor Massal Bank Soal'
+      : isUsers
+      ? 'Impor Massal Data Siswa'
+      : 'Impor Massal Sekolah';
 
     const html =
       '<p style="font-size:0.86rem;color:#475569;">' + guide + '</p>' +
-      '<textarea id="batch-paste-area" class="form-control" rows="8" placeholder="Tempel baris data dari spreadsheet di sini..."></textarea>';
+      paketSelectHtml +
+      '<div class="form-group">' +
+        '<label>Opsi 1: Pilih File Excel (.xlsx / .xls / .csv)</label>' +
+        '<input type="file" id="batch-excel-file" accept=".xlsx,.xls,.csv" class="form-control" />' +
+        '<small id="batch-file-status" style="color:#1d63ff;font-weight:600;"></small>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label>Opsi 2: Atau Tempel Langsung Baris dari Spreadsheet</label>' +
+        '<textarea id="batch-paste-area" class="form-control" rows="6" placeholder="Tempel baris data dari Excel/Google Sheets di sini jika tidak mengunggah file..."></textarea>' +
+      '</div>';
 
-    openModal('Impor Massal ' + (isUsers ? 'Pengguna / Siswa' : 'Sekolah'), html, 'Proses Impor', async function () {
-      const raw = $('batch-paste-area').value.trim();
-      if (!raw) {
-        showToast('Tidak ada data yang ditempel.', 'warning');
+    openModal(modalTitle, html, 'Proses Impor', async function () {
+      let matrix = parsedFileMatrix;
+      if (!matrix) {
+        const raw = $('batch-paste-area').value.trim();
+        if (!raw) {
+          showToast('Pilih file Excel atau tempel data terlebih dahulu.', 'warning');
+          return;
+        }
+        matrix = raw
+          .split(/\r?\n/)
+          .filter(function (l) {
+            return l.trim() !== '';
+          })
+          .map(function (line) {
+            return line.split('\t');
+          });
+      }
+
+      const targetPaketId = isSoal ? $('batch-target-paket').value : '';
+      const records = [];
+
+      matrix.forEach(function (cols, idx) {
+        const c0 = String(cols[0] || '').trim().toLowerCase();
+        const c1 = String(cols[1] || '').trim().toLowerCase();
+        const c5 = String(cols[5] || '').trim().toLowerCase();
+
+        if (idx === 0) {
+          if (isUsers && (c0.indexOf('username') !== -1 || c0.indexOf('nisn') !== -1)) {
+            return;
+          }
+          if (isSoal && (c0.indexOf('no_urut') !== -1 || c5 === 'pertanyaan')) {
+            return;
+          }
+          if (!isUsers && !isSoal && (c0.indexOf('sekolah_id') !== -1 || c1.indexOf('nama_sekolah') !== -1)) {
+            return;
+          }
+        }
+
+        if (isSoal) {
+          if (!String(cols[5] || '').trim()) {
+            return;
+          }
+          records.push(parseImportedSoalRow(cols, targetPaketId, records.length + 1));
+        } else if (isUsers) {
+          const uname = String(cols[0] || '').trim();
+          const nama = String(cols[1] || '').trim();
+          if (!uname || !nama) {
+            return;
+          }
+          records.push({
+            username: uname,
+            nama_lengkap: nama,
+            kelas: String(cols[2] || '').trim(),
+            password: String(cols[3] || uname).trim(),
+            role: 'siswa',
+            sekolah_id: String(cols[4] || state.user.sekolah_id || '').trim(),
+            status: 'AKTIF'
+          });
+        } else {
+          const sName = String(cols[1] || '').trim();
+          if (!sName) {
+            return;
+          }
+          records.push({
+            sekolah_id: String(cols[0] || '').trim(),
+            nama_sekolah: sName,
+            kecamatan: String(cols[2] || '').trim(),
+            jenjang: String(cols[3] || 'SD').trim(),
+            status_aktif: 'AKTIF'
+          });
+        }
+      });
+
+      if (records.length === 0) {
+        showToast('Tidak ditemukan baris data valid untuk diimpor.', 'warning');
         return;
       }
-      const lines = raw.split(/\r?\n/).filter(function (l) { return l.trim() !== ''; });
-      const records = lines.map(function (line) {
-        const cols = line.split('\t');
-        if (isUsers) {
-          return {
-            username: (cols[0] || '').trim(),
-            nama_lengkap: (cols[1] || '').trim(),
-            kelas: (cols[2] || '').trim(),
-            password: (cols[3] || cols[0] || '123456').trim(),
-            role: 'siswa',
-            sekolah_id: state.user.sekolah_id || '',
-            status: 'AKTIF'
-          };
-        }
-        return {
-          sekolah_id: (cols[0] || '').trim(),
-          nama_sekolah: (cols[1] || '').trim(),
-          kecamatan: (cols[2] || '').trim(),
-          jenjang: (cols[3] || 'SD').trim(),
-          status_aktif: 'AKTIF'
-        };
-      });
 
       closeModal();
       showLoader('Mengimpor ' + records.length + ' baris data...');
@@ -1519,7 +1815,9 @@ const EduApp = (function () {
         }
         showToast(res.inserted + ' data berhasil diimpor.', 'success');
         const menus = getPortalMenus(String(state.user.role || '').toLowerCase());
-        const activeMenu = menus.find(function (m) { return m.key === state.portalTab; });
+        const activeMenu = menus.find(function (m) {
+          return m.key === state.portalTab;
+        });
         if (activeMenu) {
           await loadCrudModule(activeMenu);
         }
@@ -1528,6 +1826,39 @@ const EduApp = (function () {
       } finally {
         hideLoader();
       }
+    });
+
+    $('batch-excel-file').addEventListener('change', function (ev) {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) {
+        parsedFileMatrix = null;
+        $('batch-file-status').textContent = '';
+        return;
+      }
+      if (typeof XLSX === 'undefined') {
+        showToast('Library pembaca Excel belum termuat. Segarkan halaman dan coba lagi.', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+          const preferredSheet = isSoal ? 'Template_Bank_Soal' : isUsers ? 'Template_Data_Siswa' : wb.SheetNames[0];
+          const sheetName = wb.SheetNames.indexOf(preferredSheet) !== -1 ? preferredSheet : wb.SheetNames[0];
+          const ws = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          parsedFileMatrix = rows.filter(function (r) {
+            return Array.isArray(r) && r.some(function (cell) {
+              return String(cell || '').trim() !== '';
+            });
+          });
+          $('batch-file-status').textContent = 'Sheet "' + sheetName + '" siap diproses (' + Math.max(0, parsedFileMatrix.length - 1) + ' baris data terbaca).';
+        } catch (err) {
+          parsedFileMatrix = null;
+          showToast('Gagal membaca file Excel: ' + err.message, 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
     });
   }
 
