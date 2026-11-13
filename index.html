@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="print.css" />
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -380,6 +381,14 @@
                 <input type="text" id="crud-search" placeholder="Cari data..." />
               </div>
               <select id="crud-filter" class="filter-select hidden"></select>
+              <button type="button" id="btn-crud-gemini" class="btn-outline hidden">
+                <i data-lucide="sparkles"></i>
+                <span>Atur Gemini AI</span>
+              </button>
+              <button type="button" id="btn-crud-cards" class="btn-outline hidden">
+                <i data-lucide="id-card"></i>
+                <span>Cetak Kartu Akun</span>
+              </button>
               <button type="button" id="btn-crud-import" class="btn-outline hidden">
                 <i data-lucide="upload"></i>
                 <span>Impor Massal</span>
@@ -429,8 +438,11 @@
     </div>
   </div>
 
+  <div id="print-sheet-area" class="print-only-sheet" aria-hidden="true"></div>
+
   <script src="api.js"></script>
   <script src="dashboard.js"></script>
+  <script src="report.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
