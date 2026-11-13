@@ -1661,6 +1661,7 @@ const EduApp = (function () {
       .join('');
 
     const currentTipe = rec.tipe_soal_kode || 'PG';
+    const initialImgUrl = normalizeDriveImageUrl(rec.stimulus_gambar_url || '');
 
     const html =
       '<div class="form-grid">' +
@@ -1677,12 +1678,12 @@ const EduApp = (function () {
         '<div class="form-group full">' +
           '<label>Gambar Ilustrasi Soal (Link Google Drive Otomatis / Unggah & Kompres WebP)</label>' +
           '<div style="display:flex;gap:8px;align-items:center;">' +
-            '<input id="q-stimulus_gambar_url" class="form-control" value="' + EduDashboard.escapeHtml(rec.stimulus_gambar_url || '') + '" placeholder="Tempel link Google Drive biasa atau pilih gambar..." />' +
+            '<input id="q-stimulus_gambar_url" class="form-control" value="' + EduDashboard.escapeHtml(initialImgUrl) + '" placeholder="Tempel link Google Drive biasa atau pilih gambar..." />' +
             '<button type="button" id="btn-q-pick-image" class="btn-outline" style="white-space:nowrap;"><i data-lucide="image"></i><span>Pilih & Kompres</span></button>' +
             '<input type="file" id="q-image-file-input" accept="image/*" class="hidden" />' +
           '</div>' +
-          '<div id="q-image-preview-box" class="' + (rec.stimulus_gambar_url ? '' : 'hidden') + '" style="margin-top:8px;padding:8px;border:1px dashed #cbd5e1;border-radius:10px;text-align:center;background:#f8fafc;">' +
-            '<img id="q-image-preview-img" src="' + EduDashboard.escapeHtml(rec.stimulus_gambar_url || '') + '" alt="Pratinjau Gambar" style="max-height:140px;max-width:100%;border-radius:6px;" />' +
+          '<div id="q-image-preview-box" class="' + (initialImgUrl ? '' : 'hidden') + '" style="margin-top:8px;padding:8px;border:1px dashed #cbd5e1;border-radius:10px;text-align:center;background:#f8fafc;">' +
+            '<img id="q-image-preview-img" src="' + EduDashboard.escapeHtml(initialImgUrl) + '" alt="Pratinjau Gambar" style="max-height:140px;max-width:100%;border-radius:6px;" />' +
             '<div id="q-image-preview-info" style="font-size:0.78rem;color:#475569;margin-top:4px;">Pratinjau gambar soal aktif</div>' +
           '</div>' +
         '</div>' +
@@ -1718,20 +1719,44 @@ const EduApp = (function () {
     const previewImg = $('q-image-preview-img');
     const previewInfo = $('q-image-preview-info');
 
-    urlInput.addEventListener('change', function () {
+    previewImg.addEventListener('load', function () {
+      previewInfo.style.color = '#065f46';
+      previewInfo.textContent = 'Pratinjau gambar berhasil dimuat';
+    });
+
+    previewImg.addEventListener('error', function () {
+      const curSrc = String(previewImg.src || '');
+      const thumbMatch = curSrc.match(/drive\.google\.com\/thumbnail\?id=([a-zA-Z0-9_-]+)/);
+      if (thumbMatch && thumbMatch[1] && !previewImg.dataset.fallbackTried) {
+        previewImg.dataset.fallbackTried = '1';
+        const fallbackUrl = 'https://lh3.googleusercontent.com/d/' + thumbMatch[1] + '=w800';
+        urlInput.value = fallbackUrl;
+        previewImg.src = fallbackUrl;
+        return;
+      }
+      previewInfo.style.color = '#b91c1c';
+      previewInfo.textContent = 'Gambar gagal dimuat. Pastikan izin file di Google Drive diatur ke "Siapa saja yang memiliki link" (Pelihat).';
+    });
+
+    const handleUrlUpdate = function () {
+      delete previewImg.dataset.fallbackTried;
       const converted = normalizeDriveImageUrl(urlInput.value);
       if (converted !== urlInput.value.trim()) {
         urlInput.value = converted;
-        showToast('Link Google Drive otomatis dikonversi ke format thumbnail ringan.', 'info');
+        showToast('Link Google Drive otomatis dikonversi ke format gambar langsung.', 'info');
       }
       if (converted) {
         previewImg.src = converted;
-        previewInfo.textContent = 'Pratinjau gambar dari URL';
+        previewInfo.style.color = '#475569';
+        previewInfo.textContent = 'Memuat pratinjau gambar...';
         previewBox.classList.remove('hidden');
       } else {
         previewBox.classList.add('hidden');
       }
-    });
+    };
+
+    urlInput.addEventListener('change', handleUrlUpdate);
+    urlInput.addEventListener('input', handleUrlUpdate);
 
     $('btn-q-pick-image').addEventListener('click', function () {
       $('q-image-file-input').click();
