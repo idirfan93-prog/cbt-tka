@@ -1051,6 +1051,8 @@ const EduApp = (function () {
       const importBtn = $('btn-crud-import');
       const printBtn = $('btn-crud-print');
       const cardsBtn = $('btn-crud-cards');
+      const copySoalBtn = $('btn-crud-copy-soal');
+      const previewSoalBtn = $('btn-crud-preview-soal');
       const geminiBtn = $('btn-crud-gemini');
       const analysisExcelBtn = $('btn-crud-analysis-excel');
       const answerKeyBtn = $('btn-crud-answer-key');
@@ -1060,6 +1062,8 @@ const EduApp = (function () {
       importBtn.classList.add('hidden');
       printBtn.classList.add('hidden');
       cardsBtn.classList.add('hidden');
+      copySoalBtn.classList.add('hidden');
+      previewSoalBtn.classList.add('hidden');
       geminiBtn.classList.add('hidden');
       analysisExcelBtn.classList.add('hidden');
       answerKeyBtn.classList.add('hidden');
@@ -1072,6 +1076,10 @@ const EduApp = (function () {
       }
       if (menuObj.entity === 'Users' || menuObj.entity === 'Sekolah' || menuObj.entity === 'Bank_Soal') {
         importBtn.classList.remove('hidden');
+      }
+      if (menuObj.entity === 'Bank_Soal') {
+        copySoalBtn.classList.remove('hidden');
+        previewSoalBtn.classList.remove('hidden');
       }
       if (menuObj.entity === 'Users') {
         cardsBtn.classList.remove('hidden');
@@ -1292,12 +1300,19 @@ const EduApp = (function () {
           .join('');
 
         const isGuruRole = String(state.user.role || '').toLowerCase() === 'guru';
+        const isExamInProgress = entity === 'Hasil_Ujian' && String(row.status_pengerjaan || '').toUpperCase() !== 'SELESAI';
         const actionButtons = entity === 'Hasil_Ujian'
-          ? '<button type="button" class="btn-edit-sm" data-report-id="' + recId + '">Laporan & Analisis</button> ' +
+          ? (isExamInProgress
+              ? '<button type="button" class="btn-outline-sm" data-force-finish-id="' + recId + '">Paksa Selesai</button> '
+              : '') +
+            '<button type="button" class="btn-edit-sm" data-report-id="' + recId + '">Laporan & Analisis</button> ' +
             '<button type="button" class="btn-danger-sm" data-del-id="' + recId + '">Reset</button>'
           : (entity === 'Jadwal_Ujian' && isGuruRole)
           ? '<span class="badge-soft-slate">Info Admin</span>'
-          : (entity === 'Users' && String(row.role).toLowerCase() !== 'admin'
+          : (entity === 'Paket_Ujian'
+              ? '<button type="button" class="btn-outline-sm" data-preview-paket-id="' + recId + '">Pratinjau</button> '
+              : '') +
+            (entity === 'Users' && String(row.role).toLowerCase() !== 'admin'
               ? '<button type="button" class="btn-outline-sm" data-card-id="' + recId + '">Kartu</button> '
               : '') +
             '<button type="button" class="btn-edit-sm" data-edit-id="' + recId + '">Edit</button> ' +
@@ -1306,6 +1321,41 @@ const EduApp = (function () {
         return '<tr>' + cells + '<td class="no-print" style="white-space:nowrap;">' + actionButtons + '</td></tr>';
       })
       .join('');
+
+    tbody.querySelectorAll('[data-force-finish-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const hasilId = btn.getAttribute('data-force-finish-id');
+        openModal(
+          'Konfirmasi Paksa Selesai Ujian',
+          '<p>Sesi pengerjaan siswa akan ditutup secara paksa dan dinilai otomatis menggunakan <strong>jawaban terakhir yang tersinkron di server</strong>.</p>' +
+          '<p style="margin-top:8px;color:#475569;">Lanjutkan menutup sesi ujian ini?</p>',
+          'Ya, Paksa Selesai',
+          async function () {
+            closeModal();
+            showLoader('Menutup sesi dan menghitung nilai...');
+            try {
+              const res = await EduApi.forceFinishExamSession(hasilId);
+              showToast('Sesi ditutup. Skor akhir: ' + res.skor_akhir, 'success');
+              const menus = getPortalMenus(String(state.user.role || '').toLowerCase());
+              const activeMenu = menus.find(function (m) { return m.key === state.portalTab; });
+              if (activeMenu) {
+                await loadCrudModule(activeMenu);
+              }
+            } catch (err) {
+              showToast(err.message, 'error');
+            } finally {
+              hideLoader();
+            }
+          }
+        );
+      });
+    });
+
+    tbody.querySelectorAll('[data-preview-paket-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openStudentPreviewModal(btn.getAttribute('data-preview-paket-id'));
+      });
+    });
 
     tbody.querySelectorAll('[data-report-id]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -2122,6 +2172,295 @@ const EduApp = (function () {
     });
   }
 
+  function openCopyQuestionsModal() {
+    if (!state.paketList || state.paketList.length < 2) {
+      showToast('Diperlukan minimal 2 Paket Ujian untuk menyalin soal antar-paket.', 'warning');
+      return;
+    }
+
+    const activeFilterPaket = $('crud-filter').value || '';
+    const defaultTarget = activeFilterPaket || state.paketList[1].paket_id;
+    const defaultSource = state.paketList.find(function (p) {
+      return String(p.paket_id) !== String(defaultTarget);
+    }) || state.paketList[0];
+
+    const buildPaketOpts = function (selectedId) {
+      return state.paketList
+        .map(function (p) {
+          const sel = String(p.paket_id) === String(selectedId) ? ' selected' : '';
+          return '<option value="' + EduDashboard.escapeHtml(p.paket_id) + '"' + sel + '>' + EduDashboard.escapeHtml(p.nama_ujian) + '</option>';
+        })
+        .join('');
+    };
+
+    const html =
+      '<div class="form-grid">' +
+        '<div class="form-group"><label>Paket Sumber (Asal Soal)</label><select id="copy-source-paket" class="form-control">' + buildPaketOpts(defaultSource.paket_id) + '</select></div>' +
+        '<div class="form-group"><label>Paket Tujuan (Hasil Salinan)</label><select id="copy-target-paket" class="form-control">' + buildPaketOpts(defaultTarget) + '</select></div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8faff;border:1px solid #bfdbfe;border-radius:10px;">' +
+        '<label class="checkbox-label"><input type="checkbox" id="copy-select-all" checked /><span>Pilih / Batal Pilih Semua Butir</span></label>' +
+        '<span id="copy-selected-counter" style="font-size:0.82rem;font-weight:700;color:#1d63ff;">0 soal dipilih</span>' +
+      '</div>' +
+      '<div id="copy-source-questions-box" style="max-height:290px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px;"></div>';
+
+    openModal('Salin / Gabung Soal Antar-Paket', html, 'Salin Soal Terpilih', async function () {
+      const sourceId = $('copy-source-paket').value;
+      const targetId = $('copy-target-paket').value;
+      if (String(sourceId) === String(targetId)) {
+        showToast('Paket sumber dan paket tujuan tidak boleh sama.', 'warning');
+        return;
+      }
+
+      const checkedIds = [];
+      document.querySelectorAll('.copy-soal-chk:checked').forEach(function (chk) {
+        checkedIds.push(chk.value);
+      });
+
+      if (checkedIds.length === 0) {
+        showToast('Centang minimal 1 butir soal untuk disalin.', 'warning');
+        return;
+      }
+
+      const existingTargetSoal = state.crudRecords.filter(function (s) {
+        return String(s.paket_id) === String(targetId);
+      });
+      let nextNoUrut = existingTargetSoal.reduce(function (maxNo, item) {
+        const n = Number(item.no_urut) || 0;
+        return n > maxNo ? n : maxNo;
+      }, 0) + 1;
+
+      const clonedRecords = state.crudRecords
+        .filter(function (s) {
+          return String(s.paket_id) === String(sourceId) && checkedIds.indexOf(String(s.soal_id)) !== -1;
+        })
+        .sort(function (a, b) {
+          return (Number(a.no_urut) || 0) - (Number(b.no_urut) || 0);
+        })
+        .map(function (s) {
+          const item = {
+            paket_id: targetId,
+            no_urut: nextNoUrut++,
+            tipe_soal_kode: s.tipe_soal_kode,
+            lingkup_materi_kode: s.lingkup_materi_kode || '',
+            stimulus_teks: s.stimulus_teks || '',
+            stimulus_gambar_url: s.stimulus_gambar_url || '',
+            pertanyaan: s.pertanyaan || '',
+            opsi_json: s.opsi_json || '[]',
+            kunci_json: s.kunci_json || '{}',
+            bobot: Number(s.bobot) || 1
+          };
+          return item;
+        });
+
+      closeModal();
+      showLoader('Menyalin ' + clonedRecords.length + ' butir soal...');
+      try {
+        const res = await EduApi.saveEntityRecord('Bank_Soal', 'batch_create', { records: clonedRecords });
+        showToast(res.inserted + ' soal berhasil disalin ke paket tujuan.', 'success');
+        const menus = getPortalMenus(String(state.user.role || '').toLowerCase());
+        const activeMenu = menus.find(function (m) { return m.key === state.portalTab; });
+        if (activeMenu) {
+          await loadCrudModule(activeMenu);
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        hideLoader();
+      }
+    });
+
+    const updateCounter = function () {
+      const count = document.querySelectorAll('.copy-soal-chk:checked').length;
+      $('copy-selected-counter').textContent = count + ' soal dipilih';
+    };
+
+    const renderSourceQuestions = function () {
+      const sourceId = $('copy-source-paket').value;
+      const list = state.crudRecords
+        .filter(function (s) { return String(s.paket_id) === String(sourceId); })
+        .sort(function (a, b) { return (Number(a.no_urut) || 0) - (Number(b.no_urut) || 0); });
+
+      const box = $('copy-source-questions-box');
+      if (list.length === 0) {
+        box.innerHTML = '<div style="text-align:center;padding:18px;color:#64748b;font-size:0.86rem;">Paket sumber ini belum memiliki butir soal.</div>';
+        updateCounter();
+        return;
+      }
+
+      box.innerHTML = list
+        .map(function (s) {
+          const shortQ = String(s.pertanyaan || '').slice(0, 95);
+          return (
+            '<label style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#ffffff;">' +
+              '<input type="checkbox" class="copy-soal-chk" value="' + EduDashboard.escapeHtml(s.soal_id) + '" checked style="margin-top:3px;" />' +
+              '<div style="font-size:0.85rem;">' +
+                '<strong>No. ' + EduDashboard.escapeHtml(s.no_urut) + '</strong> <span class="badge-soft-purple">' + EduDashboard.escapeHtml(s.tipe_soal_kode) + '</span> ' +
+                '<div style="color:#334155;margin-top:2px;">' + EduDashboard.escapeHtml(shortQ) + '</div>' +
+              '</div>' +
+            '</label>'
+          );
+        })
+        .join('');
+
+      box.querySelectorAll('.copy-soal-chk').forEach(function (chk) {
+        chk.addEventListener('change', updateCounter);
+      });
+      $('copy-select-all').checked = true;
+      updateCounter();
+    };
+
+    $('copy-source-paket').addEventListener('change', renderSourceQuestions);
+    $('copy-select-all').addEventListener('change', function () {
+      const checked = $('copy-select-all').checked;
+      document.querySelectorAll('.copy-soal-chk').forEach(function (chk) {
+        chk.checked = checked;
+      });
+      updateCounter();
+    });
+
+    renderSourceQuestions();
+  }
+
+  async function openStudentPreviewModal(paketId) {
+    if (!paketId) {
+      showToast('Pilih paket ujian terlebih dahulu untuk pratinjau.', 'warning');
+      return;
+    }
+
+    let allSoal = state.portalTab === 'soal' ? state.crudRecords : [];
+    if (allSoal.length === 0) {
+      showLoader('Memuat butir soal pratinjau...');
+      try {
+        const res = await EduApi.getEntityData('Bank_Soal');
+        allSoal = res.records || [];
+      } catch (err) {
+        hideLoader();
+        showToast(err.message, 'error');
+        return;
+      }
+      hideLoader();
+    }
+
+    const paketSoal = allSoal
+      .filter(function (s) { return String(s.paket_id) === String(paketId); })
+      .sort(function (a, b) { return (Number(a.no_urut) || 0) - (Number(b.no_urut) || 0); });
+
+    if (paketSoal.length === 0) {
+      showToast('Paket ujian ini belum memiliki butir soal untuk dipratinjau.', 'warning');
+      return;
+    }
+
+    const paketObj = state.paketList.find(function (p) { return String(p.paket_id) === String(paketId); }) || {};
+    let previewIdx = 0;
+
+    const html =
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;">' +
+        '<div><strong>Mode Pratinjau Layar Siswa</strong> • ' + EduDashboard.escapeHtml(paketObj.nama_ujian || paketId) + '</div>' +
+        '<div style="display:flex;gap:6px;align-items:center;">' +
+          '<button type="button" id="btn-prev-preview" class="btn-outline-sm">‹ Sebelumnya</button>' +
+          '<span id="preview-pos-label" style="font-size:0.84rem;font-weight:700;padding:0 6px;">1 / ' + paketSoal.length + '</span>' +
+          '<button type="button" id="btn-next-preview" class="btn-outline-sm">Berikutnya ›</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="preview-stage-card" class="exam-question-card" style="box-shadow:none;border:1px solid #e2e8f0;min-height:300px;"></div>';
+
+    openModal('Pratinjau Tampilan Soal Siswa', html, 'Tutup Pratinjau', closeModal, true);
+    const dialog = document.querySelector('#global-modal .modal-dialog');
+    if (dialog) {
+      dialog.classList.add('modal-wide');
+    }
+
+    const renderPreviewStage = function () {
+      const s = paketSoal[previewIdx];
+      const tipe = String(s.tipe_soal_kode || 'PG').toUpperCase();
+      let opsiParsed = [];
+      try {
+        opsiParsed = s.opsi_json ? JSON.parse(s.opsi_json) : [];
+      } catch (e) {
+        opsiParsed = [];
+      }
+
+      $('preview-pos-label').textContent = (previewIdx + 1) + ' / ' + paketSoal.length;
+      $('btn-prev-preview').disabled = previewIdx === 0;
+      $('btn-next-preview').disabled = previewIdx === paketSoal.length - 1;
+
+      const stimHtml = (s.stimulus_teks || s.stimulus_gambar_url)
+        ? '<div class="question-stimulus">' +
+            (s.stimulus_teks ? '<div class="stimulus-passage">' + EduDashboard.escapeHtml(s.stimulus_teks) + '</div>' : '') +
+            (s.stimulus_gambar_url ? '<figure class="stimulus-figure"><img src="' + EduDashboard.escapeHtml(normalizeDriveImageUrl(s.stimulus_gambar_url)) + '" alt="Ilustrasi Soal" /></figure>' : '') +
+          '</div>'
+        : '';
+
+      let optsHtml = '';
+      if (tipe === 'PG' || tipe === 'SURVEI') {
+        optsHtml = (Array.isArray(opsiParsed) ? opsiParsed : [])
+          .map(function (o, i) {
+            const badge = tipe === 'SURVEI' ? String(i + 1) : String(o.id);
+            return (
+              '<div class="option-item">' +
+                '<span class="option-key-badge">' + EduDashboard.escapeHtml(badge) + '</span>' +
+                '<span class="option-label-text">' + EduDashboard.escapeHtml(o.teks) + '</span>' +
+              '</div>'
+            );
+          })
+          .join('');
+      } else if (tipe === 'PGK_MCMA') {
+        optsHtml = (Array.isArray(opsiParsed) ? opsiParsed : [])
+          .map(function (o) {
+            return (
+              '<div class="option-item checkbox-mode">' +
+                '<span class="option-key-badge"></span>' +
+                '<span class="option-label-text">' + EduDashboard.escapeHtml(o.teks) + '</span>' +
+              '</div>'
+            );
+          })
+          .join('');
+      } else if (tipe === 'PGK_BS') {
+        const cols = opsiParsed && Array.isArray(opsiParsed.kolom) ? opsiParsed.kolom : ['Benar', 'Salah'];
+        const rows = opsiParsed && Array.isArray(opsiParsed.baris) ? opsiParsed.baris : [];
+        optsHtml =
+          '<table class="pgk-bs-table"><thead><tr><th>Pernyataan</th>' +
+          cols.map(function (c) { return '<th class="center">' + EduDashboard.escapeHtml(c) + '</th>'; }).join('') +
+          '</tr></thead><tbody>' +
+          rows.map(function (r) {
+            return '<tr><td>' + EduDashboard.escapeHtml(r.teks) + '</td>' +
+              cols.map(function () { return '<td class="center"><input type="radio" class="pgk-radio" disabled /></td>'; }).join('') +
+              '</tr>';
+          }).join('') +
+          '</tbody></table>';
+      }
+
+      $('preview-stage-card').innerHTML =
+        '<div class="question-meta-bar">' +
+          '<div class="question-badges">' +
+            '<span class="badge-solid-blue">Soal No. ' + (previewIdx + 1) + '</span>' +
+            '<span class="badge-soft-purple">' + EduDashboard.escapeHtml(getQuestionTypeLabel(tipe)) + '</span>' +
+            (s.lingkup_materi_kode ? '<span class="badge-soft-slate">' + EduDashboard.escapeHtml(resolveConfigLabel(s.lingkup_materi_kode)) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        stimHtml +
+        '<div class="question-stem">' + EduDashboard.escapeHtml(s.pertanyaan || '') + '</div>' +
+        '<div class="options-wrapper">' + optsHtml + '</div>';
+    };
+
+    $('btn-prev-preview').addEventListener('click', function () {
+      if (previewIdx > 0) {
+        previewIdx--;
+        renderPreviewStage();
+      }
+    });
+
+    $('btn-next-preview').addEventListener('click', function () {
+      if (previewIdx < paketSoal.length - 1) {
+        previewIdx++;
+        renderPreviewStage();
+      }
+    });
+
+    renderPreviewStage();
+  }
+
   async function submitCrudSave(entity, operation, record) {
     closeModal();
     showLoader('Menyimpan data ke Google Sheets...');
@@ -2373,6 +2712,15 @@ const EduApp = (function () {
           showToast: showToast
         }
       );
+    });
+
+    $('btn-crud-copy-soal').addEventListener('click', function () {
+      openCopyQuestionsModal();
+    });
+
+    $('btn-crud-preview-soal').addEventListener('click', function () {
+      const selectedPaket = $('crud-filter').value || (state.paketList[0] && state.paketList[0].paket_id);
+      openStudentPreviewModal(selectedPaket);
     });
 
     $('btn-crud-gemini').addEventListener('click', function () {
