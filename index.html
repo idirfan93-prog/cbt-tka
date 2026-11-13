@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-</head>
+  </head>
 <body>
   <div id="app-loader" class="app-loader hidden" aria-hidden="true">
     <div class="loader-spinner"></div>
@@ -167,15 +167,10 @@
       </div>
 
       <div class="exam-topbar-right">
-        <div id="exam-font-controls" class="font-size-controls hidden" role="group" aria-label="Ukuran Huruf Soal">
-          <button type="button" class="font-size-btn active" data-font-scale="normal" title="Ukuran Huruf Normal">A</button>
-          <button type="button" class="font-size-btn" data-font-scale="large" title="Ukuran Huruf Besar">A+</button>
-          <button type="button" class="font-size-btn" data-font-scale="xlarge" title="Ukuran Huruf Sangat Besar">A++</button>
-        </div>
         <button type="button" id="btn-fullscreen" class="icon-square-btn" title="Layar Penuh">
           <i data-lucide="maximize"></i>
         </button>
-        <div class="user-chip">
+        <div id="exam-user-chip" class="user-chip">
           <span class="user-chip-avatar"><i data-lucide="user"></i></span>
           <div class="user-chip-info">
             <strong id="exam-user-name">Peserta</strong>
@@ -218,9 +213,16 @@
               <span id="q-type-badge" class="badge-soft-purple">Pilihan Ganda</span>
               <span id="q-materi-badge" class="badge-soft-slate hidden"></span>
             </div>
-            <div id="exam-sync-status" class="sync-pill">
-              <span class="sync-dot"></span>
-              <span id="exam-sync-text">Tersimpan Lokal</span>
+            <div class="question-meta-right">
+              <div id="exam-font-controls" class="font-size-controls card-font-controls hidden" role="group" aria-label="Ukuran Huruf Soal">
+                <button type="button" class="font-size-btn active" data-font-scale="normal" title="Ukuran Huruf Normal">A</button>
+                <button type="button" class="font-size-btn" data-font-scale="large" title="Ukuran Huruf Besar">A+</button>
+                <button type="button" class="font-size-btn" data-font-scale="xlarge" title="Ukuran Huruf Sangat Besar">A++</button>
+              </div>
+              <div id="exam-sync-status" class="sync-pill">
+                <span class="sync-dot"></span>
+                <span id="exam-sync-text">Tersimpan Lokal</span>
+              </div>
             </div>
           </div>
 
@@ -271,23 +273,23 @@
       <footer class="exam-bottombar">
         <button type="button" id="btn-prev-question" class="btn-nav-secondary">
           <i data-lucide="chevron-left"></i>
-          <span>Soal Sebelumnya</span>
+          <span><span class="nav-label-full">Soal </span>Sebelumnya</span>
         </button>
 
         <label class="doubtful-toggle">
           <input type="checkbox" id="chk-doubtful" />
           <span class="doubtful-box"><i data-lucide="check"></i></span>
-          <span>Tandai Ragu-ragu</span>
+          <span><span class="nav-label-full">Tandai </span>Ragu-ragu</span>
         </label>
 
         <div class="bottombar-right-actions">
           <button type="button" id="btn-next-question" class="btn-nav-primary">
-            <span>Soal Berikutnya</span>
+            <span><span class="nav-label-full">Soal </span>Berikutnya</span>
             <i data-lucide="chevron-right"></i>
           </button>
           <button type="button" id="btn-finish-exam" class="btn-nav-finish hidden">
             <i data-lucide="send"></i>
-            <span>Selesai Ujian</span>
+            <span>Selesai<span class="nav-label-full"> Ujian</span></span>
           </button>
         </div>
       </footer>
