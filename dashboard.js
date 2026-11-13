@@ -182,9 +182,9 @@ const EduDashboard = (function () {
         '</div>' +
         '<div class="quick-menu-grid">' +
           '<button type="button" class="quick-menu-btn blue" data-nav-target="users"><i data-lucide="users"></i><span>Data Siswa</span></button>' +
-          '<button type="button" class="quick-menu-btn purple" data-nav-target="jadwal"><i data-lucide="calendar-plus"></i><span>Atur Jadwal</span></button>' +
+          '<button type="button" class="quick-menu-btn purple" data-nav-target="jadwal"><i data-lucide="calendar-clock"></i><span>Info Jadwal & Token</span></button>' +
           '<button type="button" class="quick-menu-btn green" data-nav-target="hasil"><i data-lucide="bar-chart-2"></i><span>Lihat Hasil</span></button>' +
-          '<button type="button" class="quick-menu-btn orange" data-nav-target="laporan"><i data-lucide="printer"></i><span>Cetak Laporan</span></button>' +
+          '<button type="button" class="quick-menu-btn orange" data-nav-target="users"><i data-lucide="id-card"></i><span>Kartu Login Siswa</span></button>' +
         '</div>' +
       '</div>' +
       '<div class="widget-card col-span-6">' +
