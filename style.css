@@ -630,6 +630,32 @@ textarea {
   color: var(--blue-dark);
 }
 
+.question-meta-right {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.font-size-controls.card-font-controls {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+}
+
+.font-size-controls.card-font-controls .font-size-btn {
+  color: var(--text-secondary);
+}
+
+.font-size-controls.card-font-controls .font-size-btn:hover {
+  background: #e2e8f0;
+  color: var(--text-primary);
+}
+
+.font-size-controls.card-font-controls .font-size-btn.active {
+  background: var(--blue-primary);
+  color: #ffffff;
+}
+
 .modal-header .icon-square-btn {
   background: var(--surface-soft);
   border-color: var(--border-light);
@@ -1964,24 +1990,64 @@ textarea {
   .mobile-only {
     display: inline-flex;
   }
-  .exam-topbar,
-  .portal-topbar {
+  .exam-topbar {
+    width: 100%;
+    max-width: 100vw;
     height: auto;
-    min-height: 54px;
     padding: 8px 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "brand logout"
+      "mapel user";
+    align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
   }
   .exam-topbar-left,
+  .exam-topbar-right {
+    display: contents;
+  }
+  .exam-topbar .topbar-brand {
+    grid-area: brand;
+    font-size: 1.05rem;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  #btn-exam-logout {
+    grid-area: logout;
+    justify-self: end;
+  }
+  #exam-title-badge {
+    grid-area: mapel;
+    justify-self: start;
+    max-width: 100%;
+    padding: 5px 10px;
+    font-size: 0.75rem;
+  }
+  #exam-user-chip {
+    grid-area: user;
+    justify-self: end;
+    max-width: 145px;
+  }
+  .portal-topbar {
+    width: 100%;
+    max-width: 100vw;
+    height: auto;
+    min-height: 54px;
+    padding: 8px 10px;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
   .portal-topbar-left {
     flex: 1 1 auto;
     min-width: 0;
-    gap: 8px;
-  }
-  .exam-topbar-right,
-  .portal-topbar-right {
     gap: 6px;
-    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .portal-topbar-right {
+    flex: 0 0 auto;
+    gap: 5px;
   }
   .topbar-brand {
     font-size: 1rem;
@@ -1996,10 +2062,14 @@ textarea {
   .portal-role-pill {
     padding: 4px 10px;
     font-size: 0.74rem;
-    max-width: 165px;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .exam-context-pill svg,
+  .portal-role-pill svg {
+    display: none;
   }
   .exam-context-pill span,
   .portal-role-pill span {
@@ -2008,16 +2078,21 @@ textarea {
     white-space: nowrap;
   }
   .user-chip {
-    padding: 3px 8px 3px 4px;
+    padding: 3px 9px 3px 4px;
     gap: 5px;
+    overflow: hidden;
   }
   .user-chip-avatar {
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  .user-chip-info {
+    min-width: 0;
   }
   .user-chip-info strong {
-    font-size: 0.75rem;
-    max-width: 72px;
+    font-size: 0.74rem;
+    max-width: 96px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2028,18 +2103,26 @@ textarea {
   .icon-square-btn {
     width: 32px;
     height: 32px;
+    flex-shrink: 0;
+  }
+  .question-meta-right {
+    width: 100%;
+    justify-content: space-between;
   }
   .font-size-btn {
     padding: 4px 7px;
     font-size: 0.74rem;
   }
   .exam-workspace {
-    padding: 12px 10px 84px;
+    padding: 10px 10px 82px;
   }
   .exam-question-card {
     padding: 16px 14px;
     border-radius: 16px;
     min-height: auto;
+  }
+  .timer-card {
+    top: 84px;
   }
   .timer-icon {
     width: 34px;
@@ -2059,17 +2142,25 @@ textarea {
     padding: 8px 10px;
     gap: 6px;
   }
+  .nav-label-full {
+    display: none;
+  }
   .btn-nav-secondary,
   .btn-nav-primary,
   .btn-nav-finish {
-    padding: 9px 10px;
-    font-size: 0.78rem;
+    padding: 9px 11px;
+    font-size: 0.8rem;
     gap: 4px;
+    white-space: nowrap;
   }
   .doubtful-toggle {
-    font-size: 0.76rem;
-    gap: 6px;
-    text-align: center;
+    font-size: 0.78rem;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  .doubtful-box {
+    width: 20px;
+    height: 20px;
   }
   .modal-backdrop {
     padding: 10px;
