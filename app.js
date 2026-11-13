@@ -878,11 +878,15 @@ const EduApp = (function () {
       const addBtn = $('btn-crud-add');
       const importBtn = $('btn-crud-import');
       const printBtn = $('btn-crud-print');
+      const cardsBtn = $('btn-crud-cards');
+      const geminiBtn = $('btn-crud-gemini');
       const filterSel = $('crud-filter');
 
       addBtn.classList.add('hidden');
       importBtn.classList.add('hidden');
       printBtn.classList.add('hidden');
+      cardsBtn.classList.add('hidden');
+      geminiBtn.classList.add('hidden');
       filterSel.classList.add('hidden');
 
       if (menuObj.entity !== 'Hasil_Ujian') {
@@ -890,6 +894,12 @@ const EduApp = (function () {
       }
       if (menuObj.entity === 'Users' || menuObj.entity === 'Sekolah' || menuObj.entity === 'Bank_Soal') {
         importBtn.classList.remove('hidden');
+      }
+      if (menuObj.entity === 'Users') {
+        cardsBtn.classList.remove('hidden');
+      }
+      if (menuObj.entity === 'Master_Konfigurasi') {
+        geminiBtn.classList.remove('hidden');
       }
       if (menuObj.printMode || menuObj.entity === 'Hasil_Ujian') {
         printBtn.classList.remove('hidden');
@@ -935,6 +945,22 @@ const EduApp = (function () {
             return '<option value="' + EduDashboard.escapeHtml(p.paket_id) + '">' + EduDashboard.escapeHtml(p.nama_ujian) + '</option>';
           })
           .join('');
+    } else if (entity === 'Hasil_Ujian') {
+      filterSel.classList.remove('hidden');
+      filterSel.innerHTML =
+        '<option value="">Semua Paket Asesmen</option>' +
+        state.paketList
+          .map(function (p) {
+            return '<option value="' + EduDashboard.escapeHtml(p.nama_ujian) + '">' + EduDashboard.escapeHtml(p.nama_ujian) + '</option>';
+          })
+          .join('');
+    } else if (entity === 'Users' && String(state.user.role).toLowerCase() === 'admin') {
+      filterSel.classList.remove('hidden');
+      filterSel.innerHTML =
+        '<option value="">Semua Peran</option>' +
+        '<option value="siswa">Siswa</option>' +
+        '<option value="guru">Guru</option>' +
+        '<option value="admin">Admin</option>';
     } else {
       filterSel.innerHTML = '';
     }
@@ -955,6 +981,12 @@ const EduApp = (function () {
         return false;
       }
       if (menuObj.entity === 'Bank_Soal' && filterVal && String(row.paket_id) !== String(filterVal)) {
+        return false;
+      }
+      if (menuObj.entity === 'Hasil_Ujian' && filterVal && String(row.nama_paket) !== String(filterVal)) {
+        return false;
+      }
+      if (menuObj.entity === 'Users' && filterVal && String(row.role).toLowerCase() !== String(filterVal)) {
         return false;
       }
       if (!q) {
@@ -1023,11 +1055,13 @@ const EduApp = (function () {
         { key: 'status', label: 'Status', isStatus: true }
       ],
       Hasil_Ujian: [
-        { key: 'user_id', label: 'ID Peserta' },
-        { key: 'sekolah_id', label: 'Sekolah', format: resolveSekolahName },
-        { key: 'status_pengerjaan', label: 'Status', isStatus: true },
-        { key: 'skor_akhir', label: 'Skor Akhir' },
-        { key: 'waktu_submit', label: 'Waktu Kirim', format: EduDashboard.formatWaktuSingkat }
+        { key: 'nama_siswa', label: 'Nama Peserta' },
+        { key: 'username_siswa', label: 'NISN / Username' },
+        { key: 'kelas_siswa', label: 'Kelas' },
+        { key: 'nama_paket', label: 'Paket Asesmen' },
+        { key: 'skor_akhir', label: 'Skor Akademik' },
+        { key: 'skor_survei', label: 'Indeks Survei', format: function (v) { return v !== null && v !== undefined && v !== '' ? v + '%' : '-'; } },
+        { key: 'status_pengerjaan', label: 'Status', isStatus: true }
       ]
     };
 
@@ -1072,13 +1106,40 @@ const EduApp = (function () {
           .join('');
 
         const actionButtons = entity === 'Hasil_Ujian'
-          ? '<button type="button" class="btn-danger-sm" data-del-id="' + recId + '">Reset</button>'
-          : '<button type="button" class="btn-edit-sm" data-edit-id="' + recId + '">Edit</button> ' +
+          ? '<button type="button" class="btn-edit-sm" data-report-id="' + recId + '">Laporan & Analisis</button> ' +
+            '<button type="button" class="btn-danger-sm" data-del-id="' + recId + '">Reset</button>'
+          : (entity === 'Users' && String(row.role).toLowerCase() !== 'admin'
+              ? '<button type="button" class="btn-outline-sm" data-card-id="' + recId + '">Kartu</button> '
+              : '') +
+            '<button type="button" class="btn-edit-sm" data-edit-id="' + recId + '">Edit</button> ' +
             '<button type="button" class="btn-danger-sm" data-del-id="' + recId + '">Hapus</button>';
 
         return '<tr>' + cells + '<td class="no-print" style="white-space:nowrap;">' + actionButtons + '</td></tr>';
       })
       .join('');
+
+    tbody.querySelectorAll('[data-report-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const hasilId = btn.getAttribute('data-report-id');
+        EduReport.openStudentReportModal(hasilId, {
+          openModal: openModal,
+          closeModal: closeModal,
+          showLoader: showLoader,
+          hideLoader: hideLoader,
+          showToast: showToast
+        });
+      });
+    });
+
+    tbody.querySelectorAll('[data-card-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const userId = btn.getAttribute('data-card-id');
+        const foundUser = state.crudRecords.find(function (r) { return String(r.user_id) === String(userId); });
+        if (foundUser) {
+          EduReport.printAccountCards([foundUser], resolveSekolahName);
+        }
+      });
+    });
 
     tbody.querySelectorAll('[data-edit-id]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -2068,6 +2129,30 @@ const EduApp = (function () {
 
     $('btn-crud-print').addEventListener('click', function () {
       window.print();
+    });
+
+    $('btn-crud-cards').addEventListener('click', function () {
+      EduReport.openBulkCardModal(
+        state.crudRecords,
+        state.sekolahList,
+        state.user,
+        resolveSekolahName,
+        {
+          openModal: openModal,
+          closeModal: closeModal,
+          showToast: showToast
+        }
+      );
+    });
+
+    $('btn-crud-gemini').addEventListener('click', function () {
+      EduReport.openGeminiConfigModal({
+        openModal: openModal,
+        closeModal: closeModal,
+        showLoader: showLoader,
+        hideLoader: hideLoader,
+        showToast: showToast
+      });
     });
 
     $('btn-modal-close').addEventListener('click', closeModal);
