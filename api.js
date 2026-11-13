@@ -173,6 +173,26 @@ const EduApi = (function () {
     return request('saveEntityRecord', body);
   }
 
+  function saveGeminiConfig(apiKey, mode) {
+    return request('saveGeminiConfig', {
+      api_key: apiKey || '',
+      mode: mode || 'save'
+    });
+  }
+
+  function getStudentReportDetail(hasilId) {
+    return request('getStudentReportDetail', {
+      hasil_id: hasilId
+    });
+  }
+
+  function generateGeminiStudentAnalysis(hasilId, forceRegenerate) {
+    return request('generateGeminiStudentAnalysis', {
+      hasil_id: hasilId,
+      force_regenerate: Boolean(forceRegenerate)
+    });
+  }
+
   const ExamStorage = {
     buildKey: function (userId, jadwalId) {
       return STORAGE_KEYS.DRAFT_PREFIX + String(userId) + '_' + String(jadwalId);
@@ -381,6 +401,9 @@ const EduApi = (function () {
     getAdminDashboard: getAdminDashboard,
     getEntityData: getEntityData,
     saveEntityRecord: saveEntityRecord,
+    saveGeminiConfig: saveGeminiConfig,
+    getStudentReportDetail: getStudentReportDetail,
+    generateGeminiStudentAnalysis: generateGeminiStudentAnalysis,
     ExamStorage: ExamStorage
   };
 })();
