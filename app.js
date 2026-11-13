@@ -12,6 +12,9 @@ const EduApp = (function () {
     timerInterval: null,
     serverTimeOffsetMs: 0,
     isSubmittingExam: false,
+    examFontScale: localStorage.getItem('cbt_exam_font_scale') || 'normal',
+    passedPhaseBreaks: {},
+    surveyPhaseStarted: false,
     portalTab: 'beranda',
     adminFilterDays: 7,
     crudRecords: [],
@@ -74,9 +77,13 @@ const EduApp = (function () {
     refreshIcons();
   }
 
-  function openModal(title, bodyHtml, saveText, onSave, hideSave) {
+  function openModal(title, bodyHtml, saveText, onSave, hideSave, cancelText) {
     $('modal-title').textContent = title;
     $('modal-body').innerHTML = bodyHtml;
+    const cancelBtn = $('btn-modal-cancel');
+    if (cancelBtn) {
+      cancelBtn.textContent = cancelText || 'Batal';
+    }
     const saveBtn = $('btn-modal-save');
     saveBtn.textContent = saveText || 'Simpan Data';
     if (hideSave) {
@@ -92,6 +99,10 @@ const EduApp = (function () {
   function closeModal() {
     $('global-modal').classList.add('hidden');
     $('modal-body').innerHTML = '';
+    const cancelBtn = $('btn-modal-cancel');
+    if (cancelBtn) {
+      cancelBtn.textContent = 'Batal';
+    }
     state.modalSaveHandler = null;
   }
 
@@ -280,9 +291,34 @@ const EduApp = (function () {
     }
   }
 
+  function applyExamFontScale(scale) {
+    const validScales = ['normal', 'large', 'xlarge'];
+    const chosen = validScales.indexOf(scale) !== -1 ? scale : 'normal';
+    state.examFontScale = chosen;
+    localStorage.setItem('cbt_exam_font_scale', chosen);
+
+    const card = document.querySelector('.exam-question-card');
+    if (card) {
+      card.classList.remove('font-large', 'font-xlarge');
+      if (chosen === 'large') {
+        card.classList.add('font-large');
+      } else if (chosen === 'xlarge') {
+        card.classList.add('font-xlarge');
+      }
+    }
+
+    document.querySelectorAll('.font-size-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-font-scale') === chosen);
+    });
+  }
+
   async function loadExamLobby() {
     $('exam-lobby').classList.remove('hidden');
     $('exam-workspace').classList.add('hidden');
+    const fontControls = $('exam-font-controls');
+    if (fontControls) {
+      fontControls.classList.add('hidden');
+    }
     $('exam-header-title').textContent = 'Daftar Asesmen Tersedia';
 
     const res = await EduApi.getAvailableExams();
@@ -377,6 +413,8 @@ const EduApp = (function () {
 
       state.activeExam = sessionData;
       state.currentQuestionIndex = 0;
+      state.passedPhaseBreaks = {};
+      state.surveyPhaseStarted = false;
 
       const localDraft = EduApi.ExamStorage.getDraft(state.user.user_id, jadwalId);
       const serverDraft = sessionData.draft_jawaban || {};
@@ -394,10 +432,38 @@ const EduApp = (function () {
       $('exam-header-title').textContent = sessionData.paket.nama_ujian + (sessionData.paket.kelas ? ' (Kelas ' + sessionData.paket.kelas + ')' : '');
       $('exam-lobby').classList.add('hidden');
       $('exam-workspace').classList.remove('hidden');
+      const fontControls = $('exam-font-controls');
+      if (fontControls) {
+        fontControls.classList.remove('hidden');
+      }
+      applyExamFontScale(state.examFontScale);
 
       renderNavGrid();
       renderCurrentQuestion();
       startExamCountdown();
+
+      const hasAnyAcademic = sessionData.soal.some(function (s) {
+        return String(s.tipe_soal_kode || 'PG').toUpperCase() !== 'SURVEI';
+      });
+      if (!hasAnyAcademic) {
+        state.surveyPhaseStarted = true;
+        openModal(
+          'Panduan Fase Survei Karakter / Sulingjar',
+          '<div style="line-height:1.6;color:#334155;">' +
+            '<p>Anda memasuki sesi <strong>Survei Karakter / Lingkungan Belajar</strong>.</p>' +
+            '<ul style="margin:10px 0 0 18px;display:flex;flex-direction:column;gap:6px;">' +
+              '<li>Pada instrumen survei ini <strong>tidak ada jawaban benar atau salah</strong>.</li>' +
+              '<li>Pilihlah pernyataan yang paling menggambarkan sikap, kebiasaan, dan pengalaman Anda sehari-hari secara jujur.</li>' +
+            '</ul>' +
+          '</div>',
+          'Mulai Mengisi Survei',
+          function () {
+            closeModal();
+          },
+          false,
+          'Tutup'
+        );
+      }
 
       EduApi.ExamStorage.startHybridCheckpoint(state.user.user_id, jadwalId, function (syncState) {
         updateSyncIndicator(syncState);
@@ -419,6 +485,9 @@ const EduApp = (function () {
     if (syncState === 'syncing') {
       pill.classList.add('syncing');
       text.textContent = 'Menyinkronkan...';
+    } else if (syncState === 'retrying') {
+      pill.classList.add('syncing');
+      text.textContent = 'Mengantre ke server...';
     } else if (syncState === 'synced') {
       text.textContent = 'Tersimpan Cloud & Lokal';
     } else {
@@ -494,11 +563,115 @@ const EduApp = (function () {
 
     grid.querySelectorAll('[data-q-idx]').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        state.currentQuestionIndex = Number(btn.getAttribute('data-q-idx')) || 0;
-        renderCurrentQuestion();
-        renderNavGrid();
+        const targetIdx = Number(btn.getAttribute('data-q-idx')) || 0;
+        navigateToQuestionIndex(targetIdx);
       });
     });
+  }
+
+  function commitQuestionNavigation(targetIdx) {
+    state.currentQuestionIndex = targetIdx;
+    renderCurrentQuestion();
+    renderNavGrid();
+  }
+
+  function navigateToQuestionIndex(targetIdx) {
+    if (!state.activeExam || !Array.isArray(state.activeExam.soal)) {
+      return;
+    }
+    const soalList = state.activeExam.soal;
+    if (targetIdx < 0 || targetIdx >= soalList.length || targetIdx === state.currentQuestionIndex) {
+      return;
+    }
+
+    const currentIdx = state.currentQuestionIndex;
+    const firstSurveyIdx = soalList.findIndex(function (s) {
+      return String(s.tipe_soal_kode || 'PG').toUpperCase() === 'SURVEI';
+    });
+    const academicCount = firstSurveyIdx === -1 ? soalList.length : firstSurveyIdx;
+
+    if (firstSurveyIdx !== -1 && currentIdx < firstSurveyIdx && targetIdx >= firstSurveyIdx && !state.surveyPhaseStarted) {
+      const academicItems = soalList.slice(0, academicCount);
+      const answeredAcademic = academicItems.filter(function (s) {
+        return isQuestionAnswered(s.soal_id);
+      }).length;
+      const unansweredAcademic = academicCount - answeredAcademic;
+
+      const html =
+        '<div style="line-height:1.6;color:#334155;">' +
+          '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:12px;">' +
+            '<strong>Ringkasan Subtes Akademik:</strong> Anda telah menjawab <strong>' + answeredAcademic + ' dari ' + academicCount + '</strong> soal.' +
+            (unansweredAcademic > 0 ? ' Masih ada <strong>' + unansweredAcademic + ' soal akademik</strong> yang belum dijawab.' : '') +
+          '</div>' +
+          '<p>Anda akan memasuki <strong>Fase Survei Karakter / Sulingjar</strong> (Soal No. ' + (firstSurveyIdx + 1) + ' s.d. ' + soalList.length + '):</p>' +
+          '<ul style="margin:8px 0 0 18px;display:flex;flex-direction:column;gap:5px;">' +
+            '<li>Pada bagian survei <strong>tidak ada jawaban benar atau salah</strong>.</li>' +
+            '<li>Jawablah dengan jujur sesuai sikap dan kebiasaan Anda sehari-hari.</li>' +
+          '</ul>' +
+        '</div>';
+
+      openModal(
+        'Transisi ke Fase Survei Karakter / Sulingjar',
+        html,
+        'Mulai Fase Survei',
+        function () {
+          state.surveyPhaseStarted = true;
+          closeModal();
+          commitQuestionNavigation(targetIdx);
+        },
+        false,
+        'Kembali Cek Soal Akademik'
+      );
+      return;
+    }
+
+    if (targetIdx > currentIdx && targetIdx < academicCount) {
+      const currentBlock = Math.floor(currentIdx / 10);
+      const targetBlock = Math.floor(targetIdx / 10);
+
+      if (targetBlock > currentBlock) {
+        const boundaryKey = 'PHASE_' + (currentBlock + 1);
+        if (!state.passedPhaseBreaks[boundaryKey]) {
+          const phaseStart = currentBlock * 10;
+          const phaseEnd = Math.min(academicCount, (currentBlock + 1) * 10);
+          const phaseSlice = soalList.slice(phaseStart, phaseEnd);
+          const answeredCount = phaseSlice.filter(function (s) {
+            return isQuestionAnswered(s.soal_id);
+          }).length;
+          const doubtfulCount = phaseSlice.filter(function (s) {
+            return Boolean(state.doubtfulMap[s.soal_id]);
+          }).length;
+          const remainingCount = phaseSlice.length - answeredCount;
+
+          const html =
+            '<div style="line-height:1.6;color:#334155;">' +
+              '<p>Anda telah mencapai akhir <strong>Fase ' + (currentBlock + 1) + ' (Soal No. ' + (phaseStart + 1) + ' – ' + phaseEnd + ')</strong>.</p>' +
+              '<div style="background:#f8faff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin:10px 0;">' +
+                '<div>• Terjawab pada fase ini: <strong>' + answeredCount + ' dari ' + phaseSlice.length + ' soal</strong></div>' +
+                (remainingCount > 0 ? '<div style="color:#b45309;">• Belum dijawab: <strong>' + remainingCount + ' soal</strong></div>' : '') +
+                (doubtfulCount > 0 ? '<div style="color:#b45309;">• Ditandai ragu-ragu: <strong>' + doubtfulCount + ' soal</strong></div>' : '') +
+              '</div>' +
+              '<p>Apakah Anda ingin melanjutkan ke <strong>Fase ' + (currentBlock + 2) + '</strong> atau memeriksa kembali jawaban pada fase ini?</p>' +
+            '</div>';
+
+          openModal(
+            'Jeda Konfirmasi — Selesai Fase ' + (currentBlock + 1),
+            html,
+            'Lanjut ke Fase Berikutnya',
+            function () {
+              state.passedPhaseBreaks[boundaryKey] = true;
+              closeModal();
+              commitQuestionNavigation(targetIdx);
+            },
+            false,
+            'Periksa Kembali Fase Ini'
+          );
+          return;
+        }
+      }
+    }
+
+    commitQuestionNavigation(targetIdx);
   }
 
   function renderCurrentQuestion() {
@@ -560,11 +733,12 @@ const EduApp = (function () {
 
     if (tipe === 'PG' || tipe === 'SURVEI') {
       const opsiList = Array.isArray(soal.opsi) ? soal.opsi : [];
+      const displayLetters = ['A', 'B', 'C', 'D', 'E'];
       container.innerHTML = opsiList
         .map(function (opt, i) {
           const optId = String(opt.id);
           const isSelected = String(currentAns) === optId;
-          const badgeChar = tipe === 'SURVEI' ? String(i + 1) : optId;
+          const badgeChar = tipe === 'SURVEI' ? String(i + 1) : (displayLetters[i] || optId);
           return (
             '<button type="button" class="option-item' + (isSelected ? ' selected' : '') + '" data-opt-id="' + EduDashboard.escapeHtml(optId) + '">' +
               '<span class="option-key-badge">' + EduDashboard.escapeHtml(badgeChar) + '</span>' +
@@ -756,8 +930,7 @@ const EduApp = (function () {
         { key: 'beranda', label: 'Beranda', icon: 'home' },
         { key: 'users', label: 'Data Siswa', icon: 'users', entity: 'Users' },
         { key: 'jadwal', label: 'Jadwal Pelaksanaan', icon: 'calendar-clock', entity: 'Jadwal_Ujian' },
-        { key: 'hasil', label: 'Hasil dan Rekap', icon: 'bar-chart-2', entity: 'Hasil_Ujian' },
-        { key: 'laporan', label: 'Cetak Laporan', icon: 'printer', entity: 'Hasil_Ujian', printMode: true }
+        { key: 'hasil', label: 'Hasil dan Rekap', icon: 'bar-chart-2', entity: 'Hasil_Ujian' }
       ];
     }
     return [
@@ -768,8 +941,7 @@ const EduApp = (function () {
       { key: 'soal', label: 'Bank Soal (Pusat)', icon: 'database', entity: 'Bank_Soal' },
       { key: 'paket', label: 'Paket & Ujian', icon: 'file-text', entity: 'Paket_Ujian' },
       { key: 'jadwal', label: 'Jadwal & Pelaksanaan', icon: 'calendar-clock', entity: 'Jadwal_Ujian' },
-      { key: 'hasil', label: 'Hasil & Rekap', icon: 'bar-chart-2', entity: 'Hasil_Ujian' },
-      { key: 'laporan', label: 'Laporan & Cetak', icon: 'printer', entity: 'Hasil_Ujian', printMode: true }
+      { key: 'hasil', label: 'Hasil & Rekap', icon: 'bar-chart-2', entity: 'Hasil_Ujian' }
     ];
   }
 
@@ -889,7 +1061,9 @@ const EduApp = (function () {
       geminiBtn.classList.add('hidden');
       filterSel.classList.add('hidden');
 
-      if (menuObj.entity !== 'Hasil_Ujian') {
+      const isGuru = String(state.user.role || '').toLowerCase() === 'guru';
+
+      if (menuObj.entity !== 'Hasil_Ujian' && !(isGuru && menuObj.entity === 'Jadwal_Ujian')) {
         addBtn.classList.remove('hidden');
       }
       if (menuObj.entity === 'Users' || menuObj.entity === 'Sekolah' || menuObj.entity === 'Bank_Soal') {
@@ -901,7 +1075,7 @@ const EduApp = (function () {
       if (menuObj.entity === 'Master_Konfigurasi') {
         geminiBtn.classList.remove('hidden');
       }
-      if (menuObj.printMode || menuObj.entity === 'Hasil_Ujian') {
+      if (menuObj.entity === 'Hasil_Ujian') {
         printBtn.classList.remove('hidden');
       }
 
@@ -915,6 +1089,10 @@ const EduApp = (function () {
   }
 
   function getCrudSubtitle(entity) {
+    const isGuru = String(state.user.role || '').toLowerCase() === 'guru';
+    if (entity === 'Jadwal_Ujian' && isGuru) {
+      return 'Daftar informasi jadwal pelaksanaan asesmen dan token sesi dari Admin (hanya baca).';
+    }
     const map = {
       Master_Konfigurasi: 'Atur Kategori Ujian (TKA, Survei Karakter, Sulingjar), Mata Pelajaran, Lingkup Materi, dan Bentuk Soal secara dinamis.',
       Sekolah: 'Kelola daftar sekolah peserta asesmen di wilayah Anda.',
@@ -1105,9 +1283,12 @@ const EduApp = (function () {
           })
           .join('');
 
+        const isGuruRole = String(state.user.role || '').toLowerCase() === 'guru';
         const actionButtons = entity === 'Hasil_Ujian'
           ? '<button type="button" class="btn-edit-sm" data-report-id="' + recId + '">Laporan & Analisis</button> ' +
             '<button type="button" class="btn-danger-sm" data-del-id="' + recId + '">Reset</button>'
+          : (entity === 'Jadwal_Ujian' && isGuruRole)
+          ? '<span class="badge-soft-slate">Info Admin</span>'
           : (entity === 'Users' && String(row.role).toLowerCase() !== 'admin'
               ? '<button type="button" class="btn-outline-sm" data-card-id="' + recId + '">Kartu</button> '
               : '') +
@@ -2007,6 +2188,12 @@ const EduApp = (function () {
       }
     });
 
+    document.querySelectorAll('.font-size-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyExamFontScale(btn.getAttribute('data-font-scale'));
+      });
+    });
+
     $('btn-fullscreen').addEventListener('click', function () {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(function () {});
@@ -2028,14 +2215,15 @@ const EduApp = (function () {
       if (!state.activeExam) {
         return;
       }
-      updateSyncIndicator('syncing');
-      try {
-        await EduApi.syncProgress(state.activeExam.jadwal_id, state.answers);
-        updateSyncIndicator('synced');
+      const ok = await EduApi.ExamStorage.flushOutboxNow(
+        state.user.user_id,
+        state.activeExam.jadwal_id,
+        updateSyncIndicator
+      );
+      if (ok) {
         showToast('Jawaban berhasil dicadangkan ke server.', 'success');
-      } catch (err) {
-        updateSyncIndicator('local');
-        showToast('Gagal sinkron ke server, data tetap aman di laptop.', 'warning');
+      } else {
+        showToast('Sedang mengantre atau menunggu perubahan baru, data tetap aman di laptop.', 'info');
       }
     });
 
@@ -2061,9 +2249,7 @@ const EduApp = (function () {
 
     $('btn-next-question').addEventListener('click', function () {
       if (state.activeExam && state.currentQuestionIndex < state.activeExam.soal.length - 1) {
-        state.currentQuestionIndex++;
-        renderCurrentQuestion();
-        renderNavGrid();
+        navigateToQuestionIndex(state.currentQuestionIndex + 1);
       }
     });
 
