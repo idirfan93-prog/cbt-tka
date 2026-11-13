@@ -145,22 +145,7 @@ const EduReport = (function () {
       ? report.hasil.skor_survei + '%'
       : '-';
 
-    const kompRowsHtml = report.kompetensi.length === 0
-      ? '<tr><td colspan="5" style="text-align:center;color:#64748b;">Belum ada pemetaan lingkup materi pada soal.</td></tr>'
-      : report.kompetensi.map(function (k) {
-          return (
-            '<tr>' +
-              '<td><strong>' + esc(k.label) + '</strong>' + (k.is_survey ? ' <span class="badge-soft-purple">Survei</span>' : '') + '</td>' +
-              '<td>' + esc(k.jumlah_soal) + ' butir</td>' +
-              '<td>' + esc(k.poin_diperoleh) + ' / ' + esc(k.poin_maksimal) + '</td>' +
-              '<td style="min-width:120px;">' +
-                '<strong>' + esc(k.persentase) + '%</strong>' +
-                '<div class="mastery-bar-track"><div class="mastery-bar-fill ' + getMasteryFillClass(k.persentase) + '" style="width:' + Math.min(100, k.persentase) + '%;"></div></div>' +
-              '</td>' +
-              '<td><span class="status-badge ' + (k.persentase >= 70 ? 'aktif' : 'terjadwal') + '">' + esc(k.predikat) + '</span></td>' +
-            '</tr>'
-          );
-        }).join('');
+    const hierarchyHtml = buildCompetencyHierarchyTableHtml(report);
 
     const itemRowsHtml = report.butir_jawaban.map(function (b) {
       return (
@@ -204,7 +189,7 @@ const EduReport = (function () {
         '<div class="ai-panel-header">' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
             '<button type="button" id="btn-run-gemini-analysis" class="btn-primary-solid">' +
-              '<i data-lucide="wand-2"></i><span>' + (report.ai_report ? 'Analisis & Pertimbangan Pedagogis' : 'Analisis & Pertimbangan Pedagogis') + '</span>' +
+              '<i data-lucide="wand-2"></i><span>' + (report.ai_report ? 'Perbarui Analisis & Pertimbangan Pedagogis' : 'Analisis & Pertimbangan Pedagogis') + '</span>' +
             '</button>' +
             '<button type="button" id="btn-print-student-summary" class="btn-outline">' +
               '<i data-lucide="file-text"></i><span>Cetak Rapor Ringkas (1 Hal. A4)</span>' +
@@ -217,10 +202,8 @@ const EduReport = (function () {
         '<div id="student-ai-analysis-content">' + renderAiCardsHtml(report.ai_report) + '</div>' +
       '</div>' +
 
-      '<div class="report-section-title"><span>Analisis Penguasaan Lingkup Materi & Dimensi</span></div>' +
-      '<div class="table-responsive"><table class="data-table"><thead><tr>' +
-        '<th>Lingkup Materi / Dimensi</th><th>Jumlah</th><th>Poin</th><th>Capaian</th><th>Predikat</th>' +
-      '</tr></thead><tbody>' + kompRowsHtml + '</tbody></table></div>' +
+      '<div class="report-section-title"><span>Capaian Penguasaan Elemen, Sub-Elemen & Kompetensi</span></div>' +
+      '<div class="table-responsive">' + hierarchyHtml + '</div>' +
 
       '<div class="report-section-title"><span>Lembar Cek Jawaban Siswa Per Butir Soal</span></div>' +
       '<div class="table-responsive"><table class="data-table"><thead><tr>' +
@@ -279,18 +262,7 @@ const EduReport = (function () {
       ? report.hasil.skor_survei + '%'
       : 'Tidak Diujikan';
 
-    const kompHtml = report.kompetensi.map(function (k, i) {
-      return (
-        '<tr>' +
-          '<td>' + (i + 1) + '</td>' +
-          '<td>' + esc(k.label) + '</td>' +
-          '<td>' + esc(k.jumlah_soal) + '</td>' +
-          '<td>' + esc(k.poin_diperoleh) + ' / ' + esc(k.poin_maksimal) + '</td>' +
-          '<td><strong>' + esc(k.persentase) + '%</strong></td>' +
-          '<td>' + esc(k.predikat) + '</td>' +
-        '</tr>'
-      );
-    }).join('');
+    const hierarchyPrintHtml = buildCompetencyHierarchyTableHtml(report);
 
     const butirHtml = includeDetails
       ? report.butir_jawaban.map(function (b) {
@@ -342,10 +314,9 @@ const EduReport = (function () {
           '</tr>' +
         '</table>' +
 
-        '<h4 style="margin-bottom:6px;font-size:10pt;color:#0b2559;">A. Capaian Penguasaan Lingkup Materi & Dimensi</h4>' +
-        '<table class="print-data-table"><thead><tr>' +
-          '<th style="width:5%;">No</th><th>Lingkup Materi / Dimensi</th><th style="width:9%;">Soal</th><th style="width:13%;">Poin</th><th style="width:11%;">Capaian</th><th style="width:18%;">Predikat</th>' +
-        '</tr></thead><tbody>' + kompHtml + '</tbody></table>' +
+        '<h4 style="margin-bottom:6px;font-size:10pt;color:#0b2559;">A. Capaian Penguasaan Elemen, Sub-Elemen & Kompetensi</h4>' +
+        hierarchyPrintHtml +
+        '<div style="height:12px;"></div>' +
 
         '<div class="print-ai-section">' +
           '<h3>B. Analisis Capaian & Pertimbangan Pedagogis</h3>' +
@@ -489,10 +460,370 @@ const EduReport = (function () {
     triggerCustomPrint('<div class="cards-print-grid">' + cardsHtml + '</div>');
   }
 
+  function formatPctTwoDecimals(val) {
+    const num = Number(val) || 0;
+    return num.toFixed(2) + '%';
+  }
+
+  function normalizeTreeNodesForDisplay(report) {
+    const rawTree = Array.isArray(report.hierarki_kompetensi) ? report.hierarki_kompetensi : [];
+    const groupedMap = {};
+    const orderedKeys = [];
+
+    rawTree.forEach(function (node) {
+      const hasExplicitChildren = (node.sub_elemen && node.sub_elemen.length > 0) || (node.indikator && node.indikator.length > 0);
+      const labelStr = String(node.label || '');
+      const dashIdx = labelStr.indexOf(' - ');
+
+      if (!hasExplicitChildren && dashIdx !== -1) {
+        const prefix = labelStr.slice(0, dashIdx).trim();
+        const detail = labelStr.slice(dashIdx + 3).trim();
+        if (!groupedMap[prefix]) {
+          groupedMap[prefix] = {
+            kode: prefix,
+            label: prefix,
+            is_survey: node.is_survey,
+            poin_diperoleh: 0,
+            poin_maksimal: 0,
+            persentase: 0,
+            sub_elemen: [],
+            indikator: []
+          };
+          orderedKeys.push(prefix);
+        }
+        const parent = groupedMap[prefix];
+        parent.poin_diperoleh += Number(node.poin_diperoleh) || 0;
+        parent.poin_maksimal += Number(node.poin_maksimal) || 0;
+        parent.indikator.push({
+          kode: node.kode,
+          label: detail,
+          persentase: node.persentase
+        });
+      } else {
+        const key = String(node.kode || labelStr);
+        groupedMap[key] = node;
+        orderedKeys.push(key);
+      }
+    });
+
+    return orderedKeys.map(function (k) {
+      const item = groupedMap[k];
+      if (item.poin_maksimal > 0) {
+        item.persentase = Math.round((item.poin_diperoleh / item.poin_maksimal) * 10000) / 100;
+      }
+      return item;
+    });
+  }
+
+  function buildCompetencyHierarchyTableHtml(report) {
+    const nodes = normalizeTreeNodesForDisplay(report);
+    if (nodes.length === 0) {
+      return '<table class="hierarchy-table"><thead><tr><th>Elemen / Kompetensi</th><th class="pct-col">Capaian</th></tr></thead>' +
+        '<tbody><tr><td colspan="2" style="text-align:center;color:#64748b;">Belum ada pemetaan elemen pada soal.</td></tr></tbody></table>';
+    }
+
+    const rowsHtml = nodes.map(function (el, idx) {
+      let block =
+        '<tr class="tier-elemen">' +
+          '<td>' + (idx + 1) + '. ' + esc(el.label) + (el.is_survey ? ' <span class="badge-soft-purple">Survei</span>' : '') + '</td>' +
+          '<td class="pct-col">' + formatPctTwoDecimals(el.persentase) + '</td>' +
+        '</tr>';
+
+      (el.sub_elemen || []).forEach(function (sub) {
+        block +=
+          '<tr class="tier-sub">' +
+            '<td class="tier-indent-1"><span class="tier-chevron">›</span>' + esc(sub.label) + '</td>' +
+            '<td class="pct-col">' + formatPctTwoDecimals(sub.persentase) + '</td>' +
+          '</tr>';
+
+        (sub.indikator || []).forEach(function (ind) {
+          block +=
+            '<tr class="tier-indikator">' +
+              '<td class="tier-indent-2"><span class="tier-chevron">›</span>' + esc(ind.label) + '</td>' +
+              '<td class="pct-col">' + formatPctTwoDecimals(ind.persentase) + '</td>' +
+            '</tr>';
+        });
+      });
+
+      (el.indikator || []).forEach(function (ind) {
+        block +=
+          '<tr class="tier-indikator">' +
+            '<td class="tier-indent-1"><span class="tier-chevron">›</span>' + esc(ind.label) + '</td>' +
+            '<td class="pct-col">' + formatPctTwoDecimals(ind.persentase) + '</td>' +
+          '</tr>';
+      });
+
+      return block;
+    }).join('');
+
+    return (
+      '<table class="hierarchy-table">' +
+        '<thead><tr><th>Elemen & Penjelasan Kompetensi</th><th class="pct-col">Capaian</th></tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody>' +
+      '</table>'
+    );
+  }
+
+  function exportClassAnalysisToExcel(analysisData) {
+    if (typeof XLSX === 'undefined') {
+      alert('Library Excel belum termuat. Segarkan halaman terlebih dahulu.');
+      return;
+    }
+
+    const elemenCols = analysisData.elemen_columns || [];
+    const studentSheetRows = (analysisData.student_rows || []).map(function (s, idx) {
+      const rowObj = {
+        Peringkat: idx + 1,
+        'NISN / Username': s.username,
+        'Nama Peserta Didik': s.nama_lengkap,
+        Kelas: s.kelas,
+        Sekolah: s.nama_sekolah,
+        'Skor Akademik': s.skor_akademik,
+        'Indeks Survei (%)': s.skor_survei !== null && s.skor_survei !== undefined ? s.skor_survei : '-'
+      };
+      elemenCols.forEach(function (elName) {
+        const val = s.elemen_scores && s.elemen_scores[elName] !== undefined ? s.elemen_scores[elName] : '-';
+        rowObj[elName + ' (%)'] = val;
+      });
+      return rowObj;
+    });
+
+    const itemSheetRows = (analysisData.item_stats || []).map(function (it) {
+      return {
+        'No Soal': it.no_urut,
+        'Bentuk Soal': it.tipe_soal_kode,
+        'Lingkup Materi / Indikator': it.lingkup_materi_label,
+        Pertanyaan: it.pertanyaan,
+        'Kunci Jawaban': it.kunci_ringkas,
+        'Jumlah Peserta': it.jumlah_peserta,
+        'Benar Penuh': it.benar_penuh,
+        Sebagian: it.sebagian,
+        'Salah / Kosong': it.salah_kosong,
+        'Penguasaan Kelas (%)': it.tingkat_penguasaan_pct,
+        'Kategori Kesukaran': it.kategori_kesukaran
+      };
+    });
+
+    const wb = XLSX.utils.book_new();
+    const wsStudents = XLSX.utils.json_to_sheet(
+      studentSheetRows.length > 0 ? studentSheetRows : [{ Keterangan: 'Belum ada peserta yang menyelesaikan ujian ini.' }]
+    );
+    const wsItems = XLSX.utils.json_to_sheet(
+      itemSheetRows.length > 0 ? itemSheetRows : [{ Keterangan: 'Belum ada butir soal pada paket ini.' }]
+    );
+
+    XLSX.utils.book_append_sheet(wb, wsStudents, 'Rekap_Nilai_Siswa');
+    XLSX.utils.book_append_sheet(wb, wsItems, 'Analisis_Butir_Soal');
+
+    const safeTitle = String(analysisData.paket.nama_ujian || 'Rekap_CBT').replace(/[^a-zA-Z0-9_-]/g, '_');
+    XLSX.writeFile(wb, 'Rekap_Analisis_' + safeTitle + '.xlsx');
+  }
+
+  async function openClassAnalysisAndExcelModal(paketList, sekolahList, currentUser, ui) {
+    if (!paketList || paketList.length === 0) {
+      ui.showToast('Belum ada paket ujian yang tersedia.', 'warning');
+      return;
+    }
+
+    const isGuru = String(currentUser.role || '').toLowerCase() === 'guru';
+    const pktOpts = paketList.map(function (p) {
+      return '<option value="' + esc(p.paket_id) + '">' + esc(p.nama_ujian) + '</option>';
+    }).join('');
+
+    const sekOpts = '<option value="">Semua Sekolah</option>' + (sekolahList || []).map(function (s) {
+      return '<option value="' + esc(s.sekolah_id) + '">' + esc(s.nama_sekolah) + '</option>';
+    }).join('');
+
+    const selectorHtml =
+      '<div class="form-grid">' +
+        '<div class="form-group ' + (isGuru ? 'full' : '') + '">' +
+          '<label>Pilih Paket Asesmen</label>' +
+          '<select id="cls-analysis-paket" class="form-control">' + pktOpts + '</select>' +
+        '</div>' +
+        (isGuru ? '' : '<div class="form-group"><label>Filter Sekolah</label><select id="cls-analysis-sekolah" class="form-control">' + sekOpts + '</select></div>') +
+      '</div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
+        '<button type="button" id="btn-load-class-analysis" class="btn-primary-solid"><i data-lucide="bar-chart-2"></i><span>Tampilkan Analisis Kelas</span></button>' +
+        '<button type="button" id="btn-download-class-excel" class="btn-outline hidden"><i data-lucide="download"></i><span>Unduh Rekap Excel (.xlsx)</span></button>' +
+      '</div>' +
+      '<div id="class-analysis-result-box" style="margin-top:8px;"></div>';
+
+    ui.openModal('Analisis Tingkat Kesukaran Butir & Ekspor Excel', selectorHtml, 'Tutup', ui.closeModal, true);
+    const dialog = document.querySelector('#global-modal .modal-dialog');
+    if (dialog) {
+      dialog.classList.add('modal-wide');
+    }
+
+    let latestAnalysisData = null;
+
+    const loadAnalysis = async function () {
+      const paketId = document.getElementById('cls-analysis-paket').value;
+      const sekEl = document.getElementById('cls-analysis-sekolah');
+      const sekolahId = isGuru ? currentUser.sekolah_id : (sekEl ? sekEl.value : '');
+      const box = document.getElementById('class-analysis-result-box');
+      const dlBtn = document.getElementById('btn-download-class-excel');
+
+      box.innerHTML = '<div style="padding:16px;text-align:center;color:#1d63ff;font-weight:700;">Menghitung tingkat kesukaran soal dan peringkat kelas...</div>';
+      try {
+        const res = await EduApi.getClassItemAnalysis(paketId, sekolahId);
+        latestAnalysisData = res;
+        dlBtn.classList.remove('hidden');
+
+        const rowsHtml = (res.item_stats || []).map(function (it) {
+          const badgeClass = it.kategori_kesukaran === 'Mudah' ? 'aktif' : it.kategori_kesukaran === 'Sukar' ? 'nonaktif' : 'terjadwal';
+          return (
+            '<tr>' +
+              '<td><strong>' + esc(it.no_urut) + '</strong></td>' +
+              '<td>' + esc(it.tipe_soal_kode) + '</td>' +
+              '<td>' + esc(it.pertanyaan) + '<div style="font-size:0.75rem;color:#64748b;margin-top:2px;">' + esc(it.lingkup_materi_label) + '</div></td>' +
+              '<td>' + esc(it.benar_penuh) + ' / ' + esc(it.jumlah_peserta) + '</td>' +
+              '<td><strong>' + esc(it.tingkat_penguasaan_pct) + '%</strong></td>' +
+              '<td><span class="status-badge ' + badgeClass + '">' + esc(it.kategori_kesukaran) + '</span></td>' +
+            '</tr>'
+          );
+        }).join('');
+
+        box.innerHTML =
+          '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:0.86rem;">' +
+            '<strong>' + esc(res.paket.nama_ujian) + '</strong> • Total Peserta Selesai: <strong>' + esc(res.student_rows.length) + ' siswa</strong>' +
+          '</div>' +
+          '<div class="table-responsive"><table class="data-table"><thead><tr>' +
+            '<th>No</th><th>Tipe</th><th>Butir Soal & Indikator</th><th>Benar Penuh</th><th>Penguasaan</th><th>Kategori</th>' +
+          '</tr></thead><tbody>' + (rowsHtml || '<tr><td colspan="6" style="text-align:center;">Belum ada data soal.</td></tr>') + '</tbody></table></div>';
+      } catch (err) {
+        box.innerHTML = '<div class="inline-alert">' + esc(err.message) + '</div>';
+      }
+    };
+
+    document.getElementById('btn-load-class-analysis').addEventListener('click', loadAnalysis);
+    document.getElementById('btn-download-class-excel').addEventListener('click', function () {
+      if (latestAnalysisData) {
+        exportClassAnalysisToExcel(latestAnalysisData);
+      }
+    });
+
+    await loadAnalysis();
+  }
+
+  function printTeacherAnswerKeySheet(data) {
+    const todayStr = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const questionsHtml = (data.soal_list || []).map(function (s) {
+      const tipe = String(s.tipe_soal_kode || 'PG').toUpperCase();
+      let optionsHtml = '';
+
+      if (tipe === 'PG') {
+        const keyId = String((s.kunci && s.kunci.jawaban) || '').toUpperCase();
+        optionsHtml = '<div class="ak-options-list">' + (Array.isArray(s.opsi) ? s.opsi : []).map(function (o) {
+          const isKey = String(o.id).toUpperCase() === keyId;
+          return (
+            '<div class="ak-option-row' + (isKey ? ' is-key' : '') + '">' +
+              '<span><strong>' + esc(o.id) + '.</strong> ' + esc(o.teks) + '</span>' +
+              (isKey ? '<span class="ak-key-pill">✓ Kunci Jawaban</span>' : '') +
+            '</div>'
+          );
+        }).join('') + '</div>';
+      } else if (tipe === 'PGK_MCMA') {
+        const keyArr = s.kunci && Array.isArray(s.kunci.jawaban) ? s.kunci.jawaban.map(String) : [];
+        optionsHtml = '<div class="ak-options-list">' + (Array.isArray(s.opsi) ? s.opsi : []).map(function (o) {
+          const isKey = keyArr.indexOf(String(o.id)) !== -1;
+          return (
+            '<div class="ak-option-row' + (isKey ? ' is-key' : '') + '">' +
+              '<span><strong>[' + esc(o.id) + ']</strong> ' + esc(o.teks) + '</span>' +
+              (isKey ? '<span class="ak-key-pill">✓ Jawaban Benar</span>' : '') +
+            '</div>'
+          );
+        }).join('') + '</div>';
+      } else if (tipe === 'PGK_BS') {
+        const rows = s.opsi && Array.isArray(s.opsi.baris) ? s.opsi.baris : [];
+        const kMap = s.kunci && s.kunci.jawaban ? s.kunci.jawaban : {};
+        optionsHtml =
+          '<table class="print-data-table" style="margin-bottom:0;"><thead><tr>' +
+            '<th>Pernyataan</th><th style="width:22%;">Kunci Jawaban</th>' +
+          '</tr></thead><tbody>' +
+          rows.map(function (r) {
+            return '<tr><td>' + esc(r.teks) + '</td><td><strong>' + esc(kMap[r.id] || '-') + '</strong></td></tr>';
+          }).join('') +
+          '</tbody></table>';
+      } else {
+        const arah = (s.kunci && s.kunci.arah) || 'POSITIF';
+        optionsHtml =
+          '<div class="ak-option-row is-key">' +
+            '<span>Instrumen Skala Survei Karakter / Sulingjar (Arah Pernyataan: <strong>' + esc(arah) + '</strong>)</span>' +
+            '<span class="ak-key-pill">Non-Kognitif</span>' +
+          '</div>';
+      }
+
+      return (
+        '<div class="ak-question-card">' +
+          '<div class="ak-q-header">' +
+            '<span>SOAL NO. ' + esc(s.no_urut) + ' • ' + esc(tipe) + '</span>' +
+            '<span>' + esc(s.lingkup_materi_label) + '</span>' +
+          '</div>' +
+          (s.stimulus_teks ? '<div class="ak-stimulus">' + esc(s.stimulus_teks) + '</div>' : '') +
+          '<div class="ak-stem">' + esc(s.pertanyaan) + '</div>' +
+          optionsHtml +
+        '</div>'
+      );
+    }).join('');
+
+    const html =
+      '<div class="a4-report-sheet">' +
+        '<div class="kop-header">' +
+          '<h2>' + esc(data.sekolah_nama) + '</h2>' +
+          '<p><strong>DOKUMEN KHUSUS GURU — NASKAH SOAL & KUNCI JAWABAN PEMBAHASAN</strong></p>' +
+          '<p>' + esc(data.paket.nama_ujian) + ' • ' + esc(data.paket.mapel_label) + ' (Kelas ' + esc(data.paket.kelas) + ') • Dicetak ' + esc(todayStr) + '</p>' +
+        '</div>' +
+        questionsHtml +
+      '</div>';
+
+    triggerCustomPrint(html);
+  }
+
+  function openPrintableAnswerKeyModal(paketList, ui) {
+    if (!paketList || paketList.length === 0) {
+      ui.showToast('Belum ada paket ujian yang tersedia.', 'warning');
+      return;
+    }
+
+    const pktOpts = paketList.map(function (p) {
+      return '<option value="' + esc(p.paket_id) + '">' + esc(p.nama_ujian) + '</option>';
+    }).join('');
+
+    const html =
+      '<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:12px;padding:12px 14px;font-size:0.86rem;color:#92400e;">' +
+        '<strong>Ketentuan Keamanan Asesmen:</strong> Naskah soal dan kunci jawaban hanya dapat dicetak untuk paket ujian yang jadwal pelaksanaannya telah berstatus <strong>Selesai</strong>.' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label>Pilih Paket Ujian yang Akan Dibahas di Kelas</label>' +
+        '<select id="ak-select-paket" class="form-control">' + pktOpts + '</select>' +
+      '</div>';
+
+    ui.openModal('Cetak Naskah Soal & Kunci Jawaban (Khusus Guru)', html, 'Buka & Cetak Naskah', async function () {
+      const paketId = document.getElementById('ak-select-paket').value;
+      ui.closeModal();
+      ui.showLoader('Memeriksa status ujian & menyiapkan naskah soal...');
+      try {
+        const res = await EduApi.getPrintableAnswerKey(paketId);
+        ui.hideLoader();
+        printTeacherAnswerKeySheet(res);
+      } catch (err) {
+        ui.hideLoader();
+        ui.showToast(err.message, 'warning');
+      }
+    });
+  }
+
   return {
     openGeminiConfigModal: openGeminiConfigModal,
     openStudentReportModal: openStudentReportModal,
     openBulkCardModal: openBulkCardModal,
-    printAccountCards: printAccountCards
+    printAccountCards: printAccountCards,
+    openClassAnalysisAndExcelModal: openClassAnalysisAndExcelModal,
+    openPrintableAnswerKeyModal: openPrintableAnswerKeyModal
   };
 })();
