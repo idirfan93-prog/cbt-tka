@@ -676,3 +676,10 @@
     print-color-adjust: exact !important;
   }
 }
+
+@media (max-width: 768px) {
+  .print-hub-tab {
+    width: 100%;
+    text-align: left;
+  }
+}
