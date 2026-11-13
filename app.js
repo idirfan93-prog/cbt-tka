@@ -1052,6 +1052,8 @@ const EduApp = (function () {
       const printBtn = $('btn-crud-print');
       const cardsBtn = $('btn-crud-cards');
       const geminiBtn = $('btn-crud-gemini');
+      const analysisExcelBtn = $('btn-crud-analysis-excel');
+      const answerKeyBtn = $('btn-crud-answer-key');
       const filterSel = $('crud-filter');
 
       addBtn.classList.add('hidden');
@@ -1059,6 +1061,8 @@ const EduApp = (function () {
       printBtn.classList.add('hidden');
       cardsBtn.classList.add('hidden');
       geminiBtn.classList.add('hidden');
+      analysisExcelBtn.classList.add('hidden');
+      answerKeyBtn.classList.add('hidden');
       filterSel.classList.add('hidden');
 
       const isGuru = String(state.user.role || '').toLowerCase() === 'guru';
@@ -1076,6 +1080,8 @@ const EduApp = (function () {
         geminiBtn.classList.remove('hidden');
       }
       if (menuObj.entity === 'Hasil_Ujian') {
+        analysisExcelBtn.classList.remove('hidden');
+        answerKeyBtn.classList.remove('hidden');
         printBtn.classList.remove('hidden');
       }
 
@@ -1112,7 +1118,9 @@ const EduApp = (function () {
         '<option value="">Semua Tipe Konfigurasi</option>' +
         '<option value="KATEGORI_UJIAN">Kategori Ujian</option>' +
         '<option value="MAPEL">Mata Pelajaran</option>' +
-        '<option value="LINGKUP_MATERI">Lingkup Materi / Dimensi</option>' +
+        '<option value="ELEMEN">Elemen (Induk Laporan - Tingkat 1)</option>' +
+        '<option value="SUB_ELEMEN">Sub-Elemen (Tingkat 2)</option>' +
+        '<option value="LINGKUP_MATERI">Kompetensi / Deskripsi Indikator (Tingkat 3)</option>' +
         '<option value="TIPE_SOAL">Bentuk / Tipe Soal</option>';
     } else if (entity === 'Bank_Soal') {
       filterSel.classList.remove('hidden');
@@ -1376,12 +1384,14 @@ const EduApp = (function () {
           '<div class="form-group"><label>Tipe Konfigurasi</label><select id="f-tipe_config" class="form-control">' +
             '<option value="KATEGORI_UJIAN"' + (rec.tipe_config === 'KATEGORI_UJIAN' ? ' selected' : '') + '>Kategori Ujian (TKA / Survei / Sulingjar)</option>' +
             '<option value="MAPEL"' + (rec.tipe_config === 'MAPEL' ? ' selected' : '') + '>Mata Pelajaran</option>' +
-            '<option value="LINGKUP_MATERI"' + (rec.tipe_config === 'LINGKUP_MATERI' ? ' selected' : '') + '>Lingkup Materi / Dimensi</option>' +
+            '<option value="ELEMEN"' + (rec.tipe_config === 'ELEMEN' ? ' selected' : '') + '>Elemen (Induk Laporan - Tingkat 1)</option>' +
+            '<option value="SUB_ELEMEN"' + (rec.tipe_config === 'SUB_ELEMEN' ? ' selected' : '') + '>Sub-Elemen (Tingkat 2)</option>' +
+            '<option value="LINGKUP_MATERI"' + (rec.tipe_config === 'LINGKUP_MATERI' ? ' selected' : '') + '>Kompetensi / Deskripsi Indikator (Tingkat 3)</option>' +
             '<option value="TIPE_SOAL"' + (rec.tipe_config === 'TIPE_SOAL' ? ' selected' : '') + '>Bentuk / Tipe Soal</option>' +
           '</select></div>' +
-          '<div class="form-group"><label>Kode Unik (Huruf Kapital)</label><input id="f-kode" class="form-control" value="' + EduDashboard.escapeHtml(rec.kode || '') + '" placeholder="Misal: TKA_SD / BIN / PGK_BS" /></div>' +
-          '<div class="form-group full"><label>Label Tampilan</label><input id="f-label" class="form-control" value="' + EduDashboard.escapeHtml(rec.label || '') + '" placeholder="Misal: Bahasa Indonesia / Survei Karakter" /></div>' +
-          '<div class="form-group"><label>Kode Induk (Opsional)</label><input id="f-parent_kode" class="form-control" value="' + EduDashboard.escapeHtml(rec.parent_kode || '') + '" placeholder="Misal: BIN (untuk lingkup materi)" /></div>' +
+          '<div class="form-group"><label>Kode Unik (Huruf Kapital)</label><input id="f-kode" class="form-control" value="' + EduDashboard.escapeHtml(rec.kode || '') + '" placeholder="Misal: ELM_BIL / SUB_RAS / IND_01" /></div>' +
+          '<div class="form-group full"><label>Label Tampilan / Deskripsi Kompetensi</label><input id="f-label" class="form-control" value="' + EduDashboard.escapeHtml(rec.label || '') + '" placeholder="Misal: Bilangan / Bilangan Rasional / Kemampuan memahami..." /></div>' +
+          '<div class="form-group"><label>Kode Induk (Parent Kode)</label><input id="f-parent_kode" class="form-control" value="' + EduDashboard.escapeHtml(rec.parent_kode || '') + '" placeholder="Misal: MTK -> ELM_BIL -> SUB_RAS" /></div>' +
           '<div class="form-group"><label>Status</label><select id="f-status_aktif" class="form-control">' +
             '<option value="AKTIF"' + (rec.status_aktif !== 'NONAKTIF' ? ' selected' : '') + '>AKTIF</option>' +
             '<option value="NONAKTIF"' + (rec.status_aktif === 'NONAKTIF' ? ' selected' : '') + '>NONAKTIF</option>' +
@@ -1586,9 +1596,17 @@ const EduApp = (function () {
       })
       .join('');
 
-    const materiOpts = '<option value="">-- Umum / Tanpa Lingkup --</option>' + getConfigByType('LINGKUP_MATERI')
+    const hierarchyConfigs = (state.masterConfig || []).filter(function (c) {
+      const t = String(c.tipe_config || '').toUpperCase();
+      return t === 'LINGKUP_MATERI' || t === 'SUB_ELEMEN' || t === 'ELEMEN';
+    });
+
+    const materiOpts = '<option value="">-- Umum / Tanpa Pemetaan --</option>' + hierarchyConfigs
       .map(function (m) {
-        return '<option value="' + EduDashboard.escapeHtml(m.kode) + '"' + (rec.lingkup_materi_kode === m.kode ? ' selected' : '') + '>' + EduDashboard.escapeHtml(m.label) + '</option>';
+        const parentHint = m.parent_kode ? ' [' + resolveConfigLabel(m.parent_kode) + ']' : '';
+        return '<option value="' + EduDashboard.escapeHtml(m.kode) + '"' + (rec.lingkup_materi_kode === m.kode ? ' selected' : '') + '>' +
+          EduDashboard.escapeHtml(m.label + parentHint) +
+        '</option>';
       })
       .join('');
 
@@ -2315,6 +2333,32 @@ const EduApp = (function () {
 
     $('btn-crud-print').addEventListener('click', function () {
       window.print();
+    });
+
+    $('btn-crud-analysis-excel').addEventListener('click', function () {
+      EduReport.openClassAnalysisAndExcelModal(
+        state.paketList,
+        state.sekolahList,
+        state.user,
+        {
+          openModal: openModal,
+          closeModal: closeModal,
+          showToast: showToast
+        }
+      );
+    });
+
+    $('btn-crud-answer-key').addEventListener('click', function () {
+      EduReport.openPrintableAnswerKeyModal(
+        state.paketList,
+        {
+          openModal: openModal,
+          closeModal: closeModal,
+          showLoader: showLoader,
+          hideLoader: hideLoader,
+          showToast: showToast
+        }
+      );
     });
 
     $('btn-crud-cards').addEventListener('click', function () {
