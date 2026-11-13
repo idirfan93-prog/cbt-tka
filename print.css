@@ -408,6 +408,146 @@
   justify-content: space-between;
 }
 
+/* 3-Tier Competency Hierarchy Table (Elemen > Sub-Elemen > Deskripsi) */
+.hierarchy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.hierarchy-table th {
+  background: #dce8ff;
+  color: #0b2559;
+  font-weight: 800;
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid #bfdbfe;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+}
+
+.hierarchy-table th.pct-col,
+.hierarchy-table td.pct-col {
+  width: 110px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.hierarchy-table td {
+  padding: 9px 14px;
+  border: 1px solid #e2e8f0;
+  color: var(--text-primary);
+  vertical-align: top;
+}
+
+.hierarchy-table tr.tier-elemen td {
+  background: #f8fafc;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.hierarchy-table tr.tier-sub td {
+  background: #ffffff;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.hierarchy-table tr.tier-indikator td {
+  background: #ffffff;
+  font-weight: 400;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.tier-indent-1 {
+  padding-left: 26px !important;
+}
+
+.tier-indent-2 {
+  padding-left: 46px !important;
+}
+
+.tier-chevron {
+  color: #64748b;
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+/* Teacher Printable Question & Answer Key Sheet */
+.ak-question-card {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  background: #ffffff;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  font-size: 9pt;
+}
+
+.ak-q-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px dashed #cbd5e1;
+  padding-bottom: 5px;
+  margin-bottom: 7px;
+  font-size: 8.2pt;
+  color: #1e3a8a;
+  font-weight: 700;
+}
+
+.ak-stimulus {
+  background: #f8fafc;
+  border-left: 3px solid #93c5fd;
+  padding: 6px 10px;
+  margin-bottom: 7px;
+  font-size: 8.6pt;
+  color: #334155;
+  white-space: pre-line;
+}
+
+.ak-stem {
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 7px;
+  white-space: pre-line;
+}
+
+.ak-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ak-option-row {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.ak-option-row.is-key {
+  background: #ecfdf5;
+  border-color: #10b981;
+  color: #065f46;
+  font-weight: 700;
+}
+
+.ak-key-pill {
+  background: #10b981;
+  color: #ffffff;
+  font-size: 7.4pt;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   .report-identity-box,
   .report-score-grid,
