@@ -206,8 +206,11 @@ const EduReport = (function () {
             '<button type="button" id="btn-run-gemini-analysis" class="btn-primary-solid">' +
               '<i data-lucide="wand-2"></i><span>' + (report.ai_report ? 'Analisis & Pertimbangan Pedagogis' : 'Analisis & Pertimbangan Pedagogis') + '</span>' +
             '</button>' +
-            '<button type="button" id="btn-print-student-report" class="btn-outline">' +
-              '<i data-lucide="printer"></i><span>Cetak Laporan Siswa (A4)</span>' +
+            '<button type="button" id="btn-print-student-summary" class="btn-outline">' +
+              '<i data-lucide="file-text"></i><span>Cetak Rapor Ringkas (1 Hal. A4)</span>' +
+            '</button>' +
+            '<button type="button" id="btn-print-student-full" class="btn-outline">' +
+              '<i data-lucide="printer"></i><span>Cetak Rapor Lengkap (+ Jawaban)</span>' +
             '</button>' +
           '</div>' +
         '</div>' +
@@ -254,12 +257,16 @@ const EduReport = (function () {
       }
     });
 
-    document.getElementById('btn-print-student-report').addEventListener('click', function () {
-      printSingleStudentReport(report);
+    document.getElementById('btn-print-student-summary').addEventListener('click', function () {
+      printSingleStudentReport(report, false);
+    });
+
+    document.getElementById('btn-print-student-full').addEventListener('click', function () {
+      printSingleStudentReport(report, true);
     });
   }
 
-  function printSingleStudentReport(report) {
+  function printSingleStudentReport(report, includeDetails) {
     const ai = report.ai_report || {
       ringkasan_capaian: 'Peserta didik memperoleh skor akademik ' + report.hasil.skor_akademik + '.',
       kekuatan_utama: '-',
@@ -285,18 +292,27 @@ const EduReport = (function () {
       );
     }).join('');
 
-    const butirHtml = report.butir_jawaban.map(function (b) {
-      return (
-        '<tr>' +
-          '<td>' + esc(b.no_urut) + '</td>' +
-          '<td>' + esc(b.tipe_soal_kode) + '</td>' +
-          '<td>' + esc(b.pertanyaan) + '</td>' +
-          '<td>' + esc(b.jawaban_siswa) + '</td>' +
-          '<td>' + esc(b.kunci_jawaban) + '</td>' +
-          '<td><strong>' + esc(b.status_butir) + '</strong></td>' +
-        '</tr>'
-      );
-    }).join('');
+    const butirHtml = includeDetails
+      ? report.butir_jawaban.map(function (b) {
+          return (
+            '<tr>' +
+              '<td>' + esc(b.no_urut) + '</td>' +
+              '<td>' + esc(b.tipe_soal_kode) + '</td>' +
+              '<td>' + esc(b.pertanyaan) + '</td>' +
+              '<td>' + esc(b.jawaban_siswa) + '</td>' +
+              '<td>' + esc(b.kunci_jawaban) + '</td>' +
+              '<td><strong>' + esc(b.status_butir) + '</strong></td>' +
+            '</tr>'
+          );
+        }).join('')
+      : '';
+
+    const detailSectionHtml = includeDetails
+      ? '<h4 style="margin-bottom:6px;font-size:10pt;color:#0b2559;">C. Rincian Pemeriksaan Jawaban Per Butir</h4>' +
+        '<table class="print-data-table"><thead><tr>' +
+          '<th style="width:5%;">No</th><th style="width:10%;">Tipe</th><th>Pertanyaan</th><th style="width:22%;">Jawaban Siswa</th><th style="width:20%;">Kunci</th><th style="width:10%;">Status</th>' +
+        '</tr></thead><tbody>' + butirHtml + '</tbody></table>'
+      : '';
 
     const todayStr = new Date().toLocaleDateString('id-ID', {
       day: 'numeric',
@@ -340,10 +356,7 @@ const EduReport = (function () {
           '<p><strong>Rekomendasi Tindak Lanjut:</strong> ' + esc(ai.rekomendasi_tindak_lanjut) + '</p>' +
         '</div>' +
 
-        '<h4 style="margin-bottom:6px;font-size:10pt;color:#0b2559;">C. Rincian Pemeriksaan Jawaban Per Butir</h4>' +
-        '<table class="print-data-table"><thead><tr>' +
-          '<th style="width:5%;">No</th><th style="width:10%;">Tipe</th><th>Pertanyaan</th><th style="width:22%;">Jawaban Siswa</th><th style="width:20%;">Kunci</th><th style="width:10%;">Status</th>' +
-        '</tr></thead><tbody>' + butirHtml + '</tbody></table>' +
+        detailSectionHtml +
 
         '<div class="signature-grid">' +
           '<div class="signature-box">' +
