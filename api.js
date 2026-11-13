@@ -11,6 +11,8 @@ const EduApi = (function () {
   let syncTimerId = null;
   let activeExamContext = null;
   let lifecycleBound = false;
+  let hasUnsyncedChanges = false;
+  let isSyncInFlight = false;
 
   function getApiUrl() {
     return localStorage.getItem(STORAGE_KEYS.API_URL) || DEFAULT_GAS_URL;
@@ -90,6 +92,54 @@ const EduApi = (function () {
     return result.data;
   }
 
+  function isNonRetryableError_(err) {
+    const msg = String((err && err.message) || '').toLowerCase();
+    const stopPhrases = [
+      'token ujian tidak sesuai',
+      'sudah menyelesaikan ujian',
+      'jadwal ujian tidak ditemukan',
+      'belum aktif',
+      'sesi tidak valid',
+      'sesi telah berakhir',
+      'hak akses',
+      'toleransi pengumpulan'
+    ];
+    return stopPhrases.some(function (phrase) {
+      return msg.indexOf(phrase) !== -1;
+    });
+  }
+
+  function sleepMs_(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  async function requestWithRetry_(action, data, options) {
+    const opts = options || {};
+    const maxAttempts = opts.maxAttempts || 4;
+    const baseDelays = [1400, 3200, 6500];
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await request(action, data, opts);
+      } catch (err) {
+        lastError = err;
+        if (attempt >= maxAttempts || isNonRetryableError_(err)) {
+          throw err;
+        }
+        if (typeof opts.onRetry === 'function') {
+          opts.onRetry(attempt, maxAttempts);
+        }
+        const baseDelay = baseDelays[attempt - 1] || 7000;
+        const jitter = Math.floor(Math.random() * 1800);
+        await sleepMs_(baseDelay + jitter);
+      }
+    }
+    throw lastError;
+  }
+
   function checkSystemStatus() {
     return request('checkSystemStatus', {});
   }
@@ -130,24 +180,36 @@ const EduApi = (function () {
   }
 
   function startOrResumeExam(jadwalId, tokenUjian) {
-    return request('startOrResumeExam', {
-      jadwal_id: jadwalId,
-      token_ujian: tokenUjian || ''
-    });
+    return requestWithRetry_(
+      'startOrResumeExam',
+      {
+        jadwal_id: jadwalId,
+        token_ujian: tokenUjian || ''
+      },
+      { maxAttempts: 4 }
+    );
   }
 
-  function syncProgress(jadwalId, jawabanObj) {
-    return request('syncProgress', {
-      jadwal_id: jadwalId,
-      jawaban: jawabanObj || {}
-    });
+  function syncProgress(jadwalId, jawabanObj, options) {
+    return requestWithRetry_(
+      'syncProgress',
+      {
+        jadwal_id: jadwalId,
+        jawaban: jawabanObj || {}
+      },
+      Object.assign({ maxAttempts: 3 }, options || {})
+    );
   }
 
-  function submitExam(jadwalId, jawabanObj) {
-    return request('submitExam', {
-      jadwal_id: jadwalId,
-      jawaban: jawabanObj || {}
-    });
+  function submitExam(jadwalId, jawabanObj, options) {
+    return requestWithRetry_(
+      'submitExam',
+      {
+        jadwal_id: jadwalId,
+        jawaban: jawabanObj || {}
+      },
+      Object.assign({ maxAttempts: 4 }, options || {})
+    );
   }
 
   function getTeacherDashboard(sekolahId) {
@@ -193,6 +255,19 @@ const EduApi = (function () {
     });
   }
 
+  function getClassItemAnalysis(paketId, sekolahId) {
+    return request('getClassItemAnalysis', {
+      paket_id: paketId,
+      sekolah_id: sekolahId || ''
+    });
+  }
+
+  function getPrintableAnswerKey(paketId) {
+    return request('getPrintableAnswerKey', {
+      paket_id: paketId
+    });
+  }
+
   const ExamStorage = {
     buildKey: function (userId, jadwalId) {
       return STORAGE_KEYS.DRAFT_PREFIX + String(userId) + '_' + String(jadwalId);
@@ -209,6 +284,7 @@ const EduApi = (function () {
         updated_at: new Date().toISOString()
       });
       localStorage.setItem(key, JSON.stringify(record));
+      hasUnsyncedChanges = true;
     },
 
     getDraft: function (userId, jadwalId) {
@@ -322,36 +398,61 @@ const EduApi = (function () {
       }
     },
 
+    flushOutboxNow: async function (userId, jadwalId, onSyncStatusChange) {
+      if (isSyncInFlight) {
+        return false;
+      }
+      const latestDraft = this.getDraft(userId, jadwalId);
+      if (!latestDraft || !latestDraft.answers) {
+        return false;
+      }
+
+      isSyncInFlight = true;
+      hasUnsyncedChanges = false;
+      try {
+        if (onSyncStatusChange) {
+          onSyncStatusChange('syncing');
+        }
+        await syncProgress(jadwalId, latestDraft.answers, {
+          onRetry: function () {
+            if (onSyncStatusChange) {
+              onSyncStatusChange('retrying');
+            }
+          }
+        });
+        if (onSyncStatusChange) {
+          onSyncStatusChange('synced');
+        }
+        return true;
+      } catch (e) {
+        hasUnsyncedChanges = true;
+        if (onSyncStatusChange) {
+          onSyncStatusChange('local');
+        }
+        return false;
+      } finally {
+        isSyncInFlight = false;
+      }
+    },
+
     startHybridCheckpoint: function (userId, jadwalId, onSyncStatusChange) {
       this.stopHybridCheckpoint();
       activeExamContext = {
         userId: userId,
         jadwalId: jadwalId
       };
+      hasUnsyncedChanges = false;
 
       const self = this;
       const scheduleNext = function () {
-        const baseIntervalMs = 3 * 60 * 1000;
-        const randomJitterMs = Math.floor(Math.random() * 25000);
+        const baseIntervalMs = 60 * 1000;
+        const randomJitterMs = Math.floor(Math.random() * 30000);
         syncTimerId = setTimeout(async function () {
           if (!activeExamContext) {
             return;
           }
-          const latestDraft = self.getDraft(userId, jadwalId);
-          if (latestDraft && latestDraft.answers) {
-            try {
-              if (onSyncStatusChange) {
-                onSyncStatusChange('syncing');
-              }
-              await syncProgress(jadwalId, latestDraft.answers);
-              if (onSyncStatusChange) {
-                onSyncStatusChange('synced');
-              }
-            } catch (e) {
-              if (onSyncStatusChange) {
-                onSyncStatusChange('local');
-              }
-            }
+          if (hasUnsyncedChanges && !isSyncInFlight) {
+            await self.flushOutboxNow(userId, jadwalId, onSyncStatusChange);
           }
           scheduleNext();
         }, baseIntervalMs + randomJitterMs);
@@ -361,12 +462,14 @@ const EduApi = (function () {
 
       if (!lifecycleBound) {
         document.addEventListener('visibilitychange', function () {
-          if (document.visibilityState === 'hidden') {
+          if (document.visibilityState === 'hidden' && hasUnsyncedChanges) {
             self.sendEmergencyBeacon();
           }
         });
         window.addEventListener('pagehide', function () {
-          self.sendEmergencyBeacon();
+          if (hasUnsyncedChanges) {
+            self.sendEmergencyBeacon();
+          }
         });
         lifecycleBound = true;
       }
@@ -378,6 +481,8 @@ const EduApi = (function () {
         syncTimerId = null;
       }
       activeExamContext = null;
+      hasUnsyncedChanges = false;
+      isSyncInFlight = false;
     }
   };
 
@@ -404,6 +509,8 @@ const EduApi = (function () {
     saveGeminiConfig: saveGeminiConfig,
     getStudentReportDetail: getStudentReportDetail,
     generateGeminiStudentAnalysis: generateGeminiStudentAnalysis,
+    getClassItemAnalysis: getClassItemAnalysis,
+    getPrintableAnswerKey: getPrintableAnswerKey,
     ExamStorage: ExamStorage
   };
 })();
