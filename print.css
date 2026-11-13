@@ -1,0 +1,443 @@
+/* ================= WIDE REPORT MODAL & ITEM ANALYSIS ================= */
+.modal-dialog.modal-wide {
+  max-width: 980px;
+}
+
+.btn-outline-sm {
+  border: 1px solid var(--border-blue);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--blue-dark);
+  padding: 5px 9px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-outline-sm:hover {
+  background: var(--blue-soft);
+}
+
+.report-identity-box {
+  background: #f8faff;
+  border: 1px solid var(--border-blue);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 20px;
+  font-size: 0.88rem;
+}
+
+.report-identity-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px dashed #dbeafe;
+  padding-bottom: 4px;
+}
+
+.report-identity-row span {
+  color: var(--text-secondary);
+}
+
+.report-score-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.report-score-card {
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  border: 1px solid var(--border-light);
+  background: #ffffff;
+  text-align: center;
+}
+
+.report-score-card.primary {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: #93c5fd;
+}
+
+.report-score-card.survey {
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  border-color: #c4b5fd;
+}
+
+.report-score-card.summary {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border-color: #6ee7b7;
+}
+
+.report-score-num {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0b2559;
+  line-height: 1.15;
+}
+
+.report-score-lbl {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+.report-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: #0b2559;
+  margin-top: 6px;
+}
+
+.mastery-bar-track {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.mastery-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--blue-primary);
+}
+
+.mastery-bar-fill.high {
+  background: var(--green-main);
+}
+
+.mastery-bar-fill.mid {
+  background: var(--orange-main);
+}
+
+.mastery-bar-fill.low {
+  background: var(--red-main);
+}
+
+/* Gemini AI Pedagogical Analysis Panel */
+.ai-panel-box {
+  background: linear-gradient(135deg, #f8faff 0%, #eef2ff 100%);
+  border: 1.5px solid #c7d2fe;
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.ai-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ai-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #4f46e5;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+
+.ai-grid-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.ai-card-item {
+  background: #ffffff;
+  border: 1px solid #e0e7ff;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.ai-card-item.full {
+  grid-column: span 2;
+}
+
+.ai-card-item h4 {
+  font-size: 0.83rem;
+  font-weight: 800;
+  color: #1e3a8a;
+  margin-bottom: 4px;
+}
+
+.ai-card-item p {
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* Answer Inspection Badges */
+.ans-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.ans-badge.benar,
+.ans-badge.terisi {
+  background: var(--green-soft);
+  color: #065f46;
+}
+
+.ans-badge.sebagian {
+  background: var(--orange-soft);
+  color: #92400e;
+}
+
+.ans-badge.salah,
+.ans-badge.kosong {
+  background: var(--red-soft);
+  color: #991b1b;
+}
+
+/* ================= PRINTABLE SHEET AREA (A4 REPORT & ID CARDS) ================= */
+.print-only-sheet {
+  display: none;
+}
+
+.a4-report-sheet {
+  background: #ffffff;
+  color: #0f172a;
+  font-family: 'Plus Jakarta Sans', Arial, sans-serif;
+  padding: 8mm 10mm;
+}
+
+.kop-header {
+  border-bottom: 3px double #0f172a;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.kop-header h2 {
+  font-size: 15pt;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #0b2559;
+}
+
+.kop-header p {
+  font-size: 9.5pt;
+  color: #334155;
+  margin-top: 2px;
+}
+
+.print-meta-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  font-size: 9.5pt;
+}
+
+.print-meta-table td {
+  padding: 4px 6px;
+  vertical-align: top;
+}
+
+.print-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8.8pt;
+  margin-bottom: 14px;
+}
+
+.print-data-table th,
+.print-data-table td {
+  border: 1px solid #94a3b8;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.print-data-table th {
+  background: #e8f0fe;
+  font-weight: 700;
+  color: #0b2559;
+}
+
+.print-ai-section {
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: #f8fafc;
+  font-size: 9pt;
+  break-inside: avoid;
+}
+
+.print-ai-section h3 {
+  font-size: 10pt;
+  font-weight: 800;
+  color: #0b2559;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #cbd5e1;
+  padding-bottom: 4px;
+}
+
+.print-ai-section p {
+  margin-bottom: 5px;
+  line-height: 1.45;
+}
+
+.signature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 40px;
+  margin-top: 22px;
+  font-size: 9.5pt;
+  break-inside: avoid;
+}
+
+.signature-box {
+  text-align: center;
+}
+
+.signature-space {
+  height: 56px;
+}
+
+/* Account Cards Grid (Student Login Card & Teacher Account Card) */
+.cards-print-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 6mm;
+}
+
+.id-card-box {
+  border: 1.5px solid #1e3a8a;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  font-size: 8.8pt;
+}
+
+.id-card-box.teacher {
+  border-color: #5b21b6;
+}
+
+.id-card-header {
+  background: linear-gradient(90deg, #1d63ff 0%, #1e3a8a 100%);
+  color: #ffffff;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.id-card-box.teacher .id-card-header {
+  background: linear-gradient(90deg, #7c3aed 0%, #4c1d95 100%);
+}
+
+.id-card-header strong {
+  font-size: 9.2pt;
+  letter-spacing: 0.02em;
+}
+
+.id-card-header span {
+  font-size: 7.4pt;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.id-card-body {
+  padding: 10px 12px;
+}
+
+.id-card-school {
+  font-size: 8pt;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.id-card-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.id-card-table td {
+  padding: 3px 2px;
+  vertical-align: top;
+}
+
+.id-card-table td.lbl {
+  width: 34%;
+  color: #475569;
+  font-weight: 600;
+}
+
+.id-card-cred {
+  font-family: 'Consolas', monospace;
+  font-size: 9.5pt;
+  font-weight: 800;
+  background: #f1f5f9;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #0f172a;
+}
+
+.id-card-footer {
+  background: #f8fafc;
+  border-top: 1px dashed #cbd5e1;
+  padding: 6px 12px;
+  font-size: 7.5pt;
+  color: #475569;
+  display: flex;
+  justify-content: space-between;
+}
+
+@media (max-width: 768px) {
+  .report-identity-box,
+  .report-score-grid,
+  .ai-grid-cards {
+    grid-template-columns: 1fr;
+  }
+  .ai-card-item.full {
+    grid-column: span 1;
+  }
+}
+
+@media print {
+  body.printing-custom-sheet #view-login,
+  body.printing-custom-sheet #view-exam,
+  body.printing-custom-sheet #view-portal,
+  body.printing-custom-sheet #global-modal,
+  body.printing-custom-sheet #app-loader,
+  body.printing-custom-sheet #toast-container {
+    display: none !important;
+  }
+
+  body.printing-custom-sheet #print-sheet-area {
+    display: block !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
