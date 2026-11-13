@@ -2142,3 +2142,19 @@ textarea {
     border: 1px solid #cbd5e1 !important;
   }
 }
+
+@media (max-width: 768px) {
+  .exam-topbar-right,
+  .portal-topbar-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .btn-nav-secondary,
+  .btn-nav-primary,
+  .btn-nav-finish,
+  .doubtful-toggle {
+    white-space: nowrap;
+    font-size: 0.75rem;
+    padding: 8px 8px;
+  }
+}
