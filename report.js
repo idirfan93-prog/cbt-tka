@@ -55,7 +55,7 @@ const EduReport = (function () {
     if (!aiReport) {
       return (
         '<div style="text-align:center;padding:14px 8px;color:#475569;font-size:0.86rem;">' +
-          'Belum ada analisis pedagogis untuk peserta didik ini. Klik tombol <strong>Analisis dengan Gemini</strong> di atas untuk menyusun analisis capaian, miskonsepsi, dan pertimbangan tindak lanjut.' +
+          'Belum ada analisis pedagogis untuk peserta didik ini. Klik tombol <strong>Analisis & Pertimbangan Pedagogis</strong> di atas untuk menyusun analisis capaian, miskonsepsi, dan pertimbangan tindak lanjut.' +
         '</div>'
       );
     }
@@ -202,10 +202,9 @@ const EduReport = (function () {
 
       '<div class="ai-panel-box">' +
         '<div class="ai-panel-header">' +
-          '<span class="ai-badge-pill"><i data-lucide="sparkles"></i> Analisis & Pertimbangan Pedagogis (Gemini)</span>' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
             '<button type="button" id="btn-run-gemini-analysis" class="btn-primary-solid">' +
-              '<i data-lucide="wand-2"></i><span>' + (report.ai_report ? 'Perbarui Analisis Gemini' : 'Analisis dengan Gemini') + '</span>' +
+              '<i data-lucide="wand-2"></i><span>' + (report.ai_report ? 'Analisis & Pertimbangan Pedagogis' : 'Analisis & Pertimbangan Pedagogis') + '</span>' +
             '</button>' +
             '<button type="button" id="btn-print-student-report" class="btn-outline">' +
               '<i data-lucide="printer"></i><span>Cetak Laporan Siswa (A4)</span>' +
