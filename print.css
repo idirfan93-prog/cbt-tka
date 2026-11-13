@@ -262,6 +262,15 @@
   color: #0b2559;
 }
 
+.print-data-table tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.print-data-table thead {
+  display: table-header-group;
+}
+
 .print-ai-section {
   border: 1px solid #94a3b8;
   border-radius: 8px;
