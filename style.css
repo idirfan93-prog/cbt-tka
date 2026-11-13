@@ -592,6 +592,38 @@ textarea {
   background: var(--red-main);
 }
 
+.font-size-controls {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.font-size-btn {
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 5px 9px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.font-size-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.font-size-btn.active {
+  background: #ffffff;
+  color: var(--blue-dark);
+}
+
 .modal-header .icon-square-btn {
   background: var(--surface-soft);
   border-color: var(--border-light);
@@ -831,6 +863,34 @@ textarea {
   color: #0f172a;
   margin-bottom: 18px;
   white-space: pre-line;
+}
+
+.exam-question-card.font-large .stimulus-passage {
+  font-size: 1.12rem;
+  line-height: 1.7;
+}
+
+.exam-question-card.font-large .question-stem {
+  font-size: 1.22rem;
+}
+
+.exam-question-card.font-large .option-label-text,
+.exam-question-card.font-large .pgk-bs-table td {
+  font-size: 1.1rem;
+}
+
+.exam-question-card.font-xlarge .stimulus-passage {
+  font-size: 1.28rem;
+  line-height: 1.8;
+}
+
+.exam-question-card.font-xlarge .question-stem {
+  font-size: 1.38rem;
+}
+
+.exam-question-card.font-xlarge .option-label-text,
+.exam-question-card.font-xlarge .pgk-bs-table td {
+  font-size: 1.24rem;
 }
 
 .options-wrapper {
