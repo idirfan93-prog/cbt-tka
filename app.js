@@ -174,6 +174,26 @@ const EduApp = (function () {
     return trimmed;
   }
 
+  function formatStimulusParagraphsHtml(rawText) {
+    const clean = String(rawText || '').trim();
+    if (!clean) {
+      return '';
+    }
+    const paragraphs = clean
+      .split(/\s*\|\s*|\r?\n+/)
+      .map(function (p) { return p.trim(); })
+      .filter(function (p) { return p !== ''; });
+
+    if (paragraphs.length === 0) {
+      return '';
+    }
+    return paragraphs
+      .map(function (p) {
+        return '<p class="stimulus-p">' + EduDashboard.escapeHtml(p) + '</p>';
+      })
+      .join('');
+  }
+
   function compressImageToWebpDataUrl(file) {
     return new Promise(function (resolve, reject) {
       const reader = new FileReader();
@@ -375,8 +395,8 @@ const EduApp = (function () {
               '<div class="exam-schedule-details">' +
                 '<span>Kelas Target: <strong>' + EduDashboard.escapeHtml(ex.kelas || 'Semua') + '</strong></span>' +
                 '<span>Durasi Pengerjaan: <strong>' + EduDashboard.escapeHtml(ex.durasi_menit) + ' Menit</strong></span>' +
-                (isFinished && ex.skor_akhir !== null
-                  ? '<span>Status: <strong style="color:#10b981;">Terkirim (Skor: ' + EduDashboard.escapeHtml(ex.skor_akhir) + ')</strong></span>'
+                (isFinished
+                  ? '<span>Status: <strong style="color:#10b981;">Terkirim (Menunggu Pembagian Hasil Guru)</strong></span>'
                   : '') +
               '</div>' +
             '</div>' +
@@ -633,10 +653,15 @@ const EduApp = (function () {
       openModal(
         'Transisi ke Fase Survei Karakter / Sulingjar',
         html,
-        'Mulai Fase Survei',
-        function () {
+        'Kirim Jawaban Akademik & Mulai Survei',
+        async function () {
           state.surveyPhaseStarted = true;
           closeModal();
+          await EduApi.ExamStorage.flushOutboxNow(
+            state.user.user_id,
+            state.activeExam.jadwal_id,
+            updateSyncIndicator
+          );
           commitQuestionNavigation(targetIdx);
         },
         false,
@@ -665,22 +690,27 @@ const EduApp = (function () {
 
           const html =
             '<div style="line-height:1.6;color:#334155;">' +
-              '<p>Anda telah mencapai akhir <strong>Fase ' + (currentBlock + 1) + ' (Soal No. ' + (phaseStart + 1) + ' – ' + phaseEnd + ')</strong>.</p>' +
+              '<p>Anda telah menyelesaikan <strong>Paket 10 Soal Fase ' + (currentBlock + 1) + ' (Soal No. ' + (phaseStart + 1) + ' – ' + phaseEnd + ')</strong>.</p>' +
               '<div style="background:#f8faff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin:10px 0;">' +
                 '<div>• Terjawab pada fase ini: <strong>' + answeredCount + ' dari ' + phaseSlice.length + ' soal</strong></div>' +
                 (remainingCount > 0 ? '<div style="color:#b45309;">• Belum dijawab: <strong>' + remainingCount + ' soal</strong></div>' : '') +
                 (doubtfulCount > 0 ? '<div style="color:#b45309;">• Ditandai ragu-ragu: <strong>' + doubtfulCount + ' soal</strong></div>' : '') +
               '</div>' +
-              '<p>Apakah Anda ingin melanjutkan ke <strong>Fase ' + (currentBlock + 2) + '</strong> atau memeriksa kembali jawaban pada fase ini?</p>' +
+              '<p>Klik <strong>Kirim Antrean & Lanjut</strong> untuk mencadangkan jawaban 10 soal ini ke server dan melanjutkan ke fase berikutnya.</p>' +
             '</div>';
 
           openModal(
-            'Jeda Konfirmasi — Selesai Fase ' + (currentBlock + 1),
+            'Konfirmasi Kirim Antrean 10 Soal — Fase ' + (currentBlock + 1),
             html,
-            'Lanjut ke Fase Berikutnya',
-            function () {
+            'Kirim Antrean & Lanjut',
+            async function () {
               state.passedPhaseBreaks[boundaryKey] = true;
               closeModal();
+              await EduApi.ExamStorage.flushOutboxNow(
+                state.user.user_id,
+                state.activeExam.jadwal_id,
+                updateSyncIndicator
+              );
               commitQuestionNavigation(targetIdx);
             },
             false,
@@ -720,7 +750,7 @@ const EduApp = (function () {
 
     if (soal.stimulus_teks || soal.stimulus_gambar_url) {
       stimBox.classList.remove('hidden');
-      stimText.textContent = soal.stimulus_teks || '';
+      stimText.innerHTML = formatStimulusParagraphsHtml(soal.stimulus_teks || '');
       if (soal.stimulus_gambar_url) {
         stimImg.src = normalizeDriveImageUrl(soal.stimulus_gambar_url);
         stimFig.classList.remove('hidden');
@@ -753,15 +783,16 @@ const EduApp = (function () {
 
     if (tipe === 'PG' || tipe === 'SURVEI') {
       const opsiList = Array.isArray(soal.opsi) ? soal.opsi : [];
-      const displayLetters = ['A', 'B', 'C', 'D', 'E'];
       container.innerHTML = opsiList
         .map(function (opt, i) {
           const optId = String(opt.id);
           const isSelected = String(currentAns) === optId;
-          const badgeChar = tipe === 'SURVEI' ? String(i + 1) : (displayLetters[i] || optId);
+          const badgeHtml = tipe === 'SURVEI'
+            ? '<span class="option-key-badge">' + (i + 1) + '</span>'
+            : '<span class="option-key-badge radio-dot"></span>';
           return (
             '<button type="button" class="option-item' + (isSelected ? ' selected' : '') + '" data-opt-id="' + EduDashboard.escapeHtml(optId) + '">' +
-              '<span class="option-key-badge">' + EduDashboard.escapeHtml(badgeChar) + '</span>' +
+              badgeHtml +
               '<span class="option-label-text">' + EduDashboard.escapeHtml(opt.teks) + '</span>' +
             '</button>'
           );
@@ -917,23 +948,31 @@ const EduApp = (function () {
       EduApi.ExamStorage.clearDraft(state.user.user_id, jadwalId);
       state.activeExam = null;
 
-      const modeNilai = String(result.mode_penilaian || 'AKADEMIK').toUpperCase();
-      const isSurveyOnly = modeNilai === 'SURVEI';
-      const isCombined = modeNilai === 'KOMBINASI';
       const summaryHtml =
-        '<div style="text-align:center;padding:12px 0;">' +
-          '<p style="font-size:0.95rem;color:#475569;margin-bottom:10px;">Asesmen <strong>' + EduDashboard.escapeHtml(namaUjian) + '</strong> telah tercatat di server.</p>' +
-          (isSurveyOnly
-            ? '<div class="status-badge aktif" style="font-size:0.95rem;padding:8px 18px;">Respons Survei Berhasil Direkam</div>'
-            : '<div style="font-size:2.4rem;font-weight:800;color:#1d63ff;">' + EduDashboard.escapeHtml(result.skor_akhir) + '</div><small style="color:#64748b;">Skor Akademik Akhir</small>' +
-              (isCombined ? '<div style="margin-top:12px;"><span class="status-badge aktif">Respons Survei Karakter / Sulingjar Ikut Terekam</span></div>' : '')) +
+        '<div style="text-align:center;padding:14px 6px;">' +
+          '<div class="status-badge aktif" style="font-size:0.95rem;padding:8px 18px;margin-bottom:12px;">Jawaban Berhasil Direkam</div>' +
+          '<p style="font-size:0.95rem;color:#334155;line-height:1.6;">Terima kasih telah menyelesaikan <strong>' + EduDashboard.escapeHtml(namaUjian) + '</strong>.</p>' +
+          '<p style="font-size:0.86rem;color:#64748b;margin-top:6px;">Hasil nilai dan rapor evaluasi akan dibagikan oleh Guru Kelas.</p>' +
         '</div>';
 
-      openModal('Ujian Selesai', summaryHtml, 'Kembali ke Daftar Ujian', function () {
-        closeModal();
-      }, true);
-
       await loadExamLobby();
+
+      openModal(
+        'Ujian Selesai',
+        summaryHtml,
+        'Kembali ke Halaman Login',
+        function () {
+          closeModal();
+          stopExamCountdown();
+          EduApi.ExamStorage.stopHybridCheckpoint();
+          EduApi.clearSession();
+          state.user = null;
+          state.activeExam = null;
+          switchMainView('login');
+        },
+        false,
+        'Ke Daftar Ujian'
+      );
     } catch (err) {
       EduApi.ExamStorage.markPendingSubmit(state.user.user_id, jadwalId);
       showToast('Koneksi terganggu. Jawaban tersimpan aman di perangkat dan akan dikirim ulang otomatis saat online.', 'warning');
@@ -1074,8 +1113,6 @@ const EduApp = (function () {
       const copySoalBtn = $('btn-crud-copy-soal');
       const previewSoalBtn = $('btn-crud-preview-soal');
       const geminiBtn = $('btn-crud-gemini');
-      const analysisExcelBtn = $('btn-crud-analysis-excel');
-      const answerKeyBtn = $('btn-crud-answer-key');
       const filterSel = $('crud-filter');
 
       addBtn.classList.add('hidden');
@@ -1085,8 +1122,6 @@ const EduApp = (function () {
       copySoalBtn.classList.add('hidden');
       previewSoalBtn.classList.add('hidden');
       geminiBtn.classList.add('hidden');
-      analysisExcelBtn.classList.add('hidden');
-      answerKeyBtn.classList.add('hidden');
       filterSel.classList.add('hidden');
 
       const isGuru = String(state.user.role || '').toLowerCase() === 'guru';
@@ -1108,8 +1143,6 @@ const EduApp = (function () {
         geminiBtn.classList.remove('hidden');
       }
       if (menuObj.entity === 'Hasil_Ujian') {
-        analysisExcelBtn.classList.remove('hidden');
-        answerKeyBtn.classList.remove('hidden');
         printBtn.classList.remove('hidden');
       }
 
@@ -2442,7 +2475,7 @@ const EduApp = (function () {
 
       const stimHtml = (s.stimulus_teks || s.stimulus_gambar_url)
         ? '<div class="question-stimulus">' +
-            (s.stimulus_teks ? '<div class="stimulus-passage">' + EduDashboard.escapeHtml(s.stimulus_teks) + '</div>' : '') +
+            (s.stimulus_teks ? '<div class="stimulus-passage">' + formatStimulusParagraphsHtml(s.stimulus_teks) + '</div>' : '') +
             (s.stimulus_gambar_url ? '<figure class="stimulus-figure"><img src="' + EduDashboard.escapeHtml(normalizeDriveImageUrl(s.stimulus_gambar_url)) + '" alt="Ilustrasi Soal" /></figure>' : '') +
           '</div>'
         : '';
@@ -2451,10 +2484,12 @@ const EduApp = (function () {
       if (tipe === 'PG' || tipe === 'SURVEI') {
         optsHtml = (Array.isArray(opsiParsed) ? opsiParsed : [])
           .map(function (o, i) {
-            const badge = tipe === 'SURVEI' ? String(i + 1) : String(o.id);
+            const badgeHtml = tipe === 'SURVEI'
+              ? '<span class="option-key-badge">' + (i + 1) + '</span>'
+              : '<span class="option-key-badge radio-dot"></span>';
             return (
               '<div class="option-item">' +
-                '<span class="option-key-badge">' + EduDashboard.escapeHtml(badge) + '</span>' +
+                badgeHtml +
                 '<span class="option-label-text">' + EduDashboard.escapeHtml(o.teks) + '</span>' +
               '</div>'
             );
@@ -2726,33 +2761,23 @@ const EduApp = (function () {
     });
 
     $('btn-crud-print').addEventListener('click', function () {
-      window.print();
-    });
-
-    $('btn-crud-analysis-excel').addEventListener('click', function () {
-      EduReport.openClassAnalysisAndExcelModal(
-        state.paketList,
-        state.sekolahList,
-        state.user,
-        {
-          openModal: openModal,
-          closeModal: closeModal,
-          showToast: showToast
-        }
-      );
-    });
-
-    $('btn-crud-answer-key').addEventListener('click', function () {
-      EduReport.openPrintableAnswerKeyModal(
-        state.paketList,
-        {
-          openModal: openModal,
-          closeModal: closeModal,
-          showLoader: showLoader,
-          hideLoader: hideLoader,
-          showToast: showToast
-        }
-      );
+      if (state.portalTab === 'hasil') {
+        EduReport.openUnifiedPrintCenterModal(
+          state.crudRecords,
+          state.paketList,
+          state.sekolahList,
+          state.user,
+          {
+            openModal: openModal,
+            closeModal: closeModal,
+            showLoader: showLoader,
+            hideLoader: hideLoader,
+            showToast: showToast
+          }
+        );
+      } else {
+        window.print();
+      }
     });
 
     $('btn-crud-cards').addEventListener('click', function () {
