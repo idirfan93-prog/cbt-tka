@@ -138,6 +138,26 @@ const EduApp = (function () {
     return found ? found.nama_sekolah : sekolahId;
   }
 
+  function toLocalDatetimeInputValue(rawDateStr) {
+    if (!rawDateStr) {
+      return '';
+    }
+    const d = new Date(rawDateStr);
+    if (isNaN(d.getTime())) {
+      return String(rawDateStr).slice(0, 16);
+    }
+    const pad = function (n) {
+      return String(n).padStart(2, '0');
+    };
+    return (
+      d.getFullYear() + '-' +
+      pad(d.getMonth() + 1) + '-' +
+      pad(d.getDate()) + 'T' +
+      pad(d.getHours()) + ':' +
+      pad(d.getMinutes())
+    );
+  }
+
   function normalizeDriveImageUrl(rawUrl) {
     const trimmed = String(rawUrl || '').trim();
     if (!trimmed) {
@@ -1608,8 +1628,8 @@ const EduApp = (function () {
             '<option value="siswa"' + (rec.target_role !== 'guru' ? ' selected' : '') + '>Siswa</option>' +
             '<option value="guru"' + (rec.target_role === 'guru' ? ' selected' : '') + '>Guru (Sulingjar Guru)</option>' +
           '</select></div>' +
-          '<div class="form-group"><label>Waktu Mulai</label><input type="datetime-local" id="f-waktu_mulai" class="form-control" value="' + EduDashboard.escapeHtml(rec.waktu_mulai ? String(rec.waktu_mulai).slice(0, 16) : '') + '" /></div>' +
-          '<div class="form-group"><label>Waktu Selesai</label><input type="datetime-local" id="f-waktu_selesai" class="form-control" value="' + EduDashboard.escapeHtml(rec.waktu_selesai ? String(rec.waktu_selesai).slice(0, 16) : '') + '" /></div>' +
+          '<div class="form-group"><label>Waktu Mulai (WIB)</label><input type="datetime-local" id="f-waktu_mulai" class="form-control" value="' + EduDashboard.escapeHtml(toLocalDatetimeInputValue(rec.waktu_mulai)) + '" /></div>' +
+          '<div class="form-group"><label>Waktu Selesai (WIB)</label><input type="datetime-local" id="f-waktu_selesai" class="form-control" value="' + EduDashboard.escapeHtml(toLocalDatetimeInputValue(rec.waktu_selesai)) + '" /></div>' +
           '<div class="form-group"><label>Token Ujian (Opsional)</label><input id="f-token_ujian" class="form-control" value="' + EduDashboard.escapeHtml(rec.token_ujian || '') + '" placeholder="Kosongkan jika tanpa token" /></div>' +
           '<div class="form-group"><label>Status Jadwal</label><select id="f-status" class="form-control">' +
             '<option value="Aktif"' + (rec.status === 'Aktif' ? ' selected' : '') + '>Aktif</option>' +
@@ -1619,13 +1639,23 @@ const EduApp = (function () {
         '</div>';
 
       openModal(isEdit ? 'Edit Jadwal Ujian' : 'Buat Jadwal Ujian', html, 'Simpan Jadwal', async function () {
+        const mulaiRaw = $('f-waktu_mulai').value;
+        const selesaiRaw = $('f-waktu_selesai').value;
+        const mulaiIso = mulaiRaw ? new Date(mulaiRaw).toISOString() : '';
+        const selesaiIso = selesaiRaw ? new Date(selesaiRaw).toISOString() : '';
+
+        if (mulaiIso && selesaiIso && new Date(selesaiIso).getTime() <= new Date(mulaiIso).getTime()) {
+          showToast('Waktu Selesai harus lebih akhir daripada Waktu Mulai.', 'warning');
+          return;
+        }
+
         const payload = {
           jadwal_id: rec.jadwal_id || '',
           paket_id: $('f-paket_id').value,
           sekolah_id: isGuru ? state.user.sekolah_id : $('f-sekolah_id').value,
           target_role: $('f-target_role').value,
-          waktu_mulai: $('f-waktu_mulai').value ? new Date($('f-waktu_mulai').value).toISOString() : '',
-          waktu_selesai: $('f-waktu_selesai').value ? new Date($('f-waktu_selesai').value).toISOString() : '',
+          waktu_mulai: mulaiIso,
+          waktu_selesai: selesaiIso,
           token_ujian: $('f-token_ujian').value.trim().toUpperCase(),
           status: $('f-status').value
         };
