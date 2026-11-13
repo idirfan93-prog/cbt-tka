@@ -268,6 +268,12 @@ const EduApi = (function () {
     });
   }
 
+  function forceFinishExamSession(hasilId) {
+    return request('forceFinishExamSession', {
+      hasil_id: hasilId
+    });
+  }
+
   const ExamStorage = {
     buildKey: function (userId, jadwalId) {
       return STORAGE_KEYS.DRAFT_PREFIX + String(userId) + '_' + String(jadwalId);
@@ -511,6 +517,7 @@ const EduApi = (function () {
     generateGeminiStudentAnalysis: generateGeminiStudentAnalysis,
     getClassItemAnalysis: getClassItemAnalysis,
     getPrintableAnswerKey: getPrintableAnswerKey,
+    forceFinishExamSession: forceFinishExamSession,
     ExamStorage: ExamStorage
   };
 })();
