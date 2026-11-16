@@ -21,9 +21,43 @@ const EduReport = (function () {
     };
     window.addEventListener('afterprint', cleanup);
 
-    setTimeout(function () {
+    const imgs = Array.prototype.slice.call(area.querySelectorAll('img'));
+    if (imgs.length === 0) {
+      setTimeout(function () {
+        window.print();
+      }, 180);
+      return;
+    }
+
+    let printed = false;
+    const runPrintOnce = function () {
+      if (printed) {
+        return;
+      }
+      printed = true;
       window.print();
-    }, 180);
+    };
+
+    let pendingCount = 0;
+    imgs.forEach(function (img) {
+      if (!img.complete) {
+        pendingCount++;
+        const onDone = function () {
+          pendingCount--;
+          if (pendingCount <= 0) {
+            setTimeout(runPrintOnce, 120);
+          }
+        };
+        img.addEventListener('load', onDone, { once: true });
+        img.addEventListener('error', onDone, { once: true });
+      }
+    });
+
+    if (pendingCount === 0) {
+      setTimeout(runPrintOnce, 180);
+    } else {
+      setTimeout(runPrintOnce, 2500);
+    }
   }
 
   function getStatusBadgeClass(statusButir) {
@@ -746,6 +780,47 @@ const EduReport = (function () {
     triggerCustomPrint(html);
   }
 
+  function extractDriveFileIdForPrint(rawUrl) {
+    const trimmed = String(rawUrl || '').trim();
+    if (!trimmed) {
+      return '';
+    }
+    const m1 = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m1 && m1[1]) {
+      return m1[1];
+    }
+    const m2 = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m2 && m2[1]) {
+      return m2[1];
+    }
+    const m3 = trimmed.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+    if (m3 && m3[1]) {
+      return m3[1];
+    }
+    return '';
+  }
+
+  function normalizePrintImageUrl(rawUrl) {
+    const trimmed = String(rawUrl || '').trim();
+    if (!trimmed) {
+      return '';
+    }
+    const driveId = extractDriveFileIdForPrint(trimmed);
+    if (driveId) {
+      return 'https://drive.google.com/thumbnail?id=' + driveId + '&sz=w800';
+    }
+    return trimmed;
+  }
+
+  function getStimulusImageGroupKey(rawUrl) {
+    const trimmed = String(rawUrl || '').trim();
+    if (!trimmed) {
+      return '';
+    }
+    const driveId = extractDriveFileIdForPrint(trimmed);
+    return driveId ? 'GDRIVE:' + driveId : trimmed;
+  }
+
   function printTeacherAnswerKeySheet(data) {
     const todayStr = new Date().toLocaleDateString('id-ID', {
       day: 'numeric',
@@ -753,9 +828,64 @@ const EduReport = (function () {
       year: 'numeric'
     });
 
+    let prevImgKey = '';
+    let imgAnchorNo = null;
+    let prevStimText = '';
+    let textAnchorNo = null;
+
     const questionsHtml = (data.soal_list || []).map(function (s) {
       const tipe = String(s.tipe_soal_kode || 'PG').toUpperCase();
       const formattedStimulus = String(s.stimulus_teks || '').replace(/\s*\|\s*/g, '\n\n');
+      const rawImgUrl = String(s.stimulus_gambar_url || '').trim();
+      const imgKey = getStimulusImageGroupKey(rawImgUrl);
+      const imgUrl = normalizePrintImageUrl(rawImgUrl);
+      const driveId = extractDriveFileIdForPrint(rawImgUrl);
+      let stimulusBlockHtml = '';
+
+      if (imgKey !== '') {
+        if (imgKey === prevImgKey) {
+          if (formattedStimulus && formattedStimulus === prevStimText) {
+            stimulusBlockHtml =
+              '<div class="ak-stimulus ak-stimulus-ref">Mengacu pada bacaan & gambar stimulus pada <strong>Soal No. ' + esc(imgAnchorNo) + '</strong> di atas.</div>';
+          } else {
+            stimulusBlockHtml =
+              '<div class="ak-stimulus">' +
+                (formattedStimulus ? '<div>' + esc(formattedStimulus) + '</div>' : '') +
+                '<div class="ak-stimulus-ref-note">Perhatikan gambar stimulus pada <strong>Soal No. ' + esc(imgAnchorNo) + '</strong> di atas.</div>' +
+              '</div>';
+          }
+        } else {
+          prevImgKey = imgKey;
+          imgAnchorNo = s.no_urut;
+          prevStimText = formattedStimulus;
+          textAnchorNo = s.no_urut;
+          stimulusBlockHtml =
+            '<div class="ak-stimulus">' +
+              (formattedStimulus ? '<div>' + esc(formattedStimulus) + '</div>' : '') +
+              '<div class="ak-stimulus-img-wrap">' +
+                '<img src="' + esc(imgUrl) + '" alt="Gambar Stimulus Soal No. ' + esc(s.no_urut) + '" data-gdrive-id="' + esc(driveId) + '" ' +
+                'onerror="if(this.dataset.gdriveId && !this.dataset.retried){this.dataset.retried=\'1\';this.src=\'https://lh3.googleusercontent.com/d/\'+this.dataset.gdriveId+\'=w800\';}else{this.style.display=\'none\';}" />' +
+              '</div>' +
+            '</div>';
+        }
+      } else {
+        prevImgKey = '';
+        imgAnchorNo = null;
+        if (formattedStimulus !== '') {
+          if (formattedStimulus === prevStimText) {
+            stimulusBlockHtml =
+              '<div class="ak-stimulus ak-stimulus-ref">Mengacu pada bacaan stimulus pada <strong>Soal No. ' + esc(textAnchorNo) + '</strong> di atas.</div>';
+          } else {
+            prevStimText = formattedStimulus;
+            textAnchorNo = s.no_urut;
+            stimulusBlockHtml = '<div class="ak-stimulus">' + esc(formattedStimulus) + '</div>';
+          }
+        } else {
+          prevStimText = '';
+          textAnchorNo = null;
+        }
+      }
+
       let optionsHtml = '';
 
       if (tipe === 'PG') {
@@ -806,7 +936,7 @@ const EduReport = (function () {
             '<span>SOAL NO. ' + esc(s.no_urut) + ' • ' + esc(tipe) + '</span>' +
             '<span>' + esc(s.lingkup_materi_label) + '</span>' +
           '</div>' +
-          (formattedStimulus ? '<div class="ak-stimulus">' + esc(formattedStimulus) + '</div>' : '') +
+          stimulusBlockHtml +
           '<div class="ak-stem">' + esc(s.pertanyaan) + '</div>' +
           optionsHtml +
         '</div>'
