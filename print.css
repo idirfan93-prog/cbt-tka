@@ -646,40 +646,49 @@
   .print-check-grid .check-master {
     grid-column: span 1;
   }
-}
-  .report-identity-box,
-  .report-score-grid,
-  .ai-grid-cards {
-    grid-template-columns: 1fr;
-  }
-  .ai-card-item.full {
-    grid-column: span 1;
+  .print-hub-tab {
+    width: 100%;
+    text-align: left;
   }
 }
 
 @media print {
-  body.printing-custom-sheet #view-login,
-  body.printing-custom-sheet #view-exam,
-  body.printing-custom-sheet #view-portal,
-  body.printing-custom-sheet #global-modal,
-  body.printing-custom-sheet #app-loader,
-  body.printing-custom-sheet #toast-container {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  body.printing-custom-sheet > *:not(#print-sheet-area) {
     display: none !important;
+    visibility: hidden !important;
   }
 
   body.printing-custom-sheet #print-sheet-area {
     display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .a4-report-sheet {
+    padding: 0 !important;
+    width: 100% !important;
   }
 
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-  }
-}
-
-@media (max-width: 768px) {
-  .print-hub-tab {
-    width: 100%;
-    text-align: left;
   }
 }
