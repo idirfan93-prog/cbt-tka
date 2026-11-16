@@ -194,6 +194,122 @@ const EduApp = (function () {
       .join('');
   }
 
+  function generateAlphaNumUpperPassword(length) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const len = Number(length) || 6;
+    let out = '';
+    for (let i = 0; i < len; i++) {
+      out += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return out;
+  }
+
+  async function downloadExcelTemplate(entity) {
+    showLoader('Menyiapkan file format Excel...');
+    try {
+      await EduApi.ensureXlsxLoaded();
+      const wb = XLSX.utils.book_new();
+
+      if (entity === 'Users') {
+        const rows = [
+          ['NPSN', 'NISN', 'Nama', 'Kelas'],
+          ['20311234', '0142894472', 'ABYAN SURYA HANDANA', '5'],
+          ['20311234', '0148937622', 'AZIZ ASWALA ALFATIH', '5']
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 30 }, { wch: 10 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Format_Data_Siswa');
+        XLSX.writeFile(wb, 'Format_Impor_Siswa_CBT_EduTryout.xlsx');
+      } else if (entity === 'Bank_Soal') {
+        const rows = [
+          [
+            'no_urut',
+            'tipe_soal_kode',
+            'lingkup_materi_kode',
+            'stimulus_teks',
+            'stimulus_gambar_url',
+            'pertanyaan',
+            'opsi_a_atau_1',
+            'opsi_b_atau_2',
+            'opsi_c_atau_3',
+            'opsi_d_atau_4',
+            'kunci_jawaban',
+            'bobot'
+          ],
+          [
+            1,
+            'PG',
+            '',
+            'Paragraf pertama bacaan.|Paragraf kedua bacaan.',
+            '',
+            'Apa gagasan utama bacaan di atas?',
+            'Pilihan jawaban A',
+            'Pilihan jawaban B',
+            'Pilihan jawaban C',
+            'Pilihan jawaban D',
+            'A',
+            1
+          ],
+          [
+            2,
+            'PGK_MCMA',
+            '',
+            '',
+            '',
+            'Pilih dua pernyataan yang benar!',
+            'Pernyataan 1 benar',
+            'Pernyataan 2 salah',
+            'Pernyataan 3 benar',
+            'Pernyataan 4 salah',
+            '1,3',
+            1
+          ],
+          [
+            3,
+            'PGK_BS',
+            '',
+            '',
+            '',
+            'Tentukan Benar atau Salah untuk setiap pernyataan berikut!',
+            'Pernyataan pertama',
+            'Pernyataan kedua',
+            'Pernyataan ketiga',
+            '',
+            'Benar,Salah,Benar',
+            1
+          ],
+          [
+            4,
+            'SURVEI',
+            '',
+            '',
+            '',
+            'Saya selalu menghargai pendapat teman saat berdiskusi kelompok.',
+            'Sangat Tidak Setuju',
+            'Tidak Setuju',
+            'Setuju',
+            'Sangat Setuju',
+            'POSITIF',
+            1
+          ]
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols'] = [
+          { wch: 9 }, { wch: 15 }, { wch: 20 }, { wch: 32 },
+          { wch: 26 }, { wch: 34 }, { wch: 20 }, { wch: 20 },
+          { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 8 }
+        ];
+        XLSX.utils.book_append_sheet(wb, ws, 'Format_Bank_Soal');
+        XLSX.writeFile(wb, 'Format_Impor_Soal_CBT_EduTryout.xlsx');
+      }
+      showToast('File format Excel berhasil diunduh.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      hideLoader();
+    }
+  }
+
   function compressImageToWebpDataUrl(file) {
     return new Promise(function (resolve, reject) {
       const reader = new FileReader();
@@ -267,23 +383,18 @@ const EduApp = (function () {
     }
 
     switchMainView('login');
-    showLoader('Memeriksa status sistem...');
-    try {
-      const status = await EduApi.checkSystemStatus();
-      if (status && status.needs_setup) {
-        $('first-admin-setup-box').classList.remove('hidden');
-        $('standard-login-box').classList.add('hidden');
-      } else {
-        $('first-admin-setup-box').classList.add('hidden');
-        $('standard-login-box').classList.remove('hidden');
-      }
-    } catch (err) {
-      const alertBox = $('login-alert');
-      alertBox.textContent = err.message;
-      alertBox.classList.remove('hidden');
-    } finally {
-      hideLoader();
-    }
+    $('first-admin-setup-box').classList.add('hidden');
+    $('standard-login-box').classList.remove('hidden');
+
+    EduApi.checkSystemStatus()
+      .then(function (status) {
+        if (status && status.needs_setup) {
+          $('first-admin-setup-box').classList.remove('hidden');
+          $('standard-login-box').classList.add('hidden');
+        }
+      })
+      .catch(function () {
+      });
   }
 
   async function routeAuthenticatedUser() {
@@ -1557,10 +1668,18 @@ const EduApp = (function () {
         })
         .join('');
 
+      const defaultPwd = isEdit ? '' : generateAlphaNumUpperPassword(6);
+
       const html =
         '<div class="form-grid">' +
           '<div class="form-group"><label>Username / NISN</label><input id="f-username" class="form-control" value="' + EduDashboard.escapeHtml(rec.username || '') + '" /></div>' +
-          '<div class="form-group"><label>Kata Sandi ' + (isEdit ? '(Kosongkan jika tetap)' : '') + '</label><input type="password" id="f-password" class="form-control" placeholder="Minimal 6 karakter" /></div>' +
+          '<div class="form-group">' +
+            '<label>Kata Sandi ' + (isEdit ? '(Kosongkan jika tetap)' : '(Huruf Besar & Angka)') + '</label>' +
+            '<div style="display:flex;gap:6px;align-items:center;">' +
+              '<input type="text" id="f-password" class="form-control" value="' + EduDashboard.escapeHtml(defaultPwd) + '" placeholder="' + (isEdit ? 'Biarkan kosong jika tetap' : 'Klik Generate') + '" style="text-transform:uppercase;font-weight:700;" />' +
+              '<button type="button" id="btn-generate-user-pwd" class="btn-outline" style="white-space:nowrap;padding:9px 11px;" title="Buat Sandi Acak Huruf Besar & Angka">Generate</button>' +
+            '</div>' +
+          '</div>' +
           '<div class="form-group full"><label>Nama Lengkap</label><input id="f-nama_lengkap" class="form-control" value="' + EduDashboard.escapeHtml(rec.nama_lengkap || '') + '" /></div>' +
           '<div class="form-group"><label>Peran</label><select id="f-role" class="form-control"' + (isGuru ? ' disabled' : '') + '>' +
             '<option value="siswa"' + (rec.role === 'siswa' ? ' selected' : '') + '>Siswa</option>' +
@@ -1574,10 +1693,11 @@ const EduApp = (function () {
         '</div>';
 
       openModal(isEdit ? 'Edit Pengguna' : 'Tambah Pengguna', html, 'Simpan', async function () {
+        const cleanPwd = $('f-password').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         const payload = {
           user_id: rec.user_id || '',
           username: $('f-username').value.trim(),
-          password: $('f-password').value,
+          password: cleanPwd,
           nama_lengkap: $('f-nama_lengkap').value.trim(),
           role: isGuru ? 'siswa' : $('f-role').value,
           kelas: $('f-kelas').value.trim(),
@@ -1589,6 +1709,14 @@ const EduApp = (function () {
           return;
         }
         await submitCrudSave(entity, isEdit ? 'update' : 'create', payload);
+      });
+
+      const pwdInput = $('f-password');
+      pwdInput.addEventListener('input', function () {
+        pwdInput.value = pwdInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      });
+      $('btn-generate-user-pwd').addEventListener('click', function () {
+        pwdInput.value = generateAlphaNumUpperPassword(6);
       });
       return;
     }
@@ -2101,10 +2229,23 @@ const EduApp = (function () {
         '</select></div>'
       : '';
 
+    const downloadFormatHtml = isUsers
+      ? '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">' +
+          '<span style="font-size:0.84rem;color:#1e3a8a;">Kolom wajib: <strong>NPSN | NISN | Nama | Kelas</strong></span>' +
+          '<button type="button" id="btn-download-template-entity" class="btn-outline-sm">Unduh Format Siswa (.xlsx)</button>' +
+        '</div>' +
+        '<label class="checkbox-label" style="margin-top:2px;"><input type="checkbox" id="batch-auto-gen-pwd" checked /><span>Otomatis Generate Password Siswa (Huruf Besar & Angka 6 Digit)</span></label>'
+      : isSoal
+      ? '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">' +
+          '<span style="font-size:0.84rem;color:#1e3a8a;">Format 12 kolom standar Bank Soal CBT</span>' +
+          '<button type="button" id="btn-download-template-entity" class="btn-outline-sm">Unduh Format Soal (.xlsx)</button>' +
+        '</div>'
+      : '';
+
     const guide = isSoal
-      ? 'Unggah file <strong>Template_Impor_Massal_CBT_EduTryout.xlsx</strong> (sheet <em>Template_Bank_Soal</em>) atau tempel baris dari Excel.'
+      ? 'Unggah file Excel hasil pengisian format soal atau tempel baris dari Excel.'
       : isUsers
-      ? 'Unggah file <strong>Template_Impor_Massal_CBT_EduTryout.xlsx</strong> (sheet <em>Template_Data_Siswa</em>) atau tempel baris dari Excel.'
+      ? 'Unggah file Excel berisi kolom <strong>NPSN, NISN, Nama, Kelas</strong> atau tempel baris dari Excel.'
       : 'Unggah file Excel atau tempel baris data sekolah (ID Sekolah, Nama Sekolah, Kecamatan, Jenjang).';
 
     const modalTitle = isSoal
@@ -2115,6 +2256,7 @@ const EduApp = (function () {
 
     const html =
       '<p style="font-size:0.86rem;color:#475569;">' + guide + '</p>' +
+      downloadFormatHtml +
       paketSelectHtml +
       '<div class="form-group">' +
         '<label>Opsi 1: Pilih File Excel (.xlsx / .xls / .csv)</label>' +
@@ -2123,7 +2265,7 @@ const EduApp = (function () {
       '</div>' +
       '<div class="form-group">' +
         '<label>Opsi 2: Atau Tempel Langsung Baris dari Spreadsheet</label>' +
-        '<textarea id="batch-paste-area" class="form-control" rows="6" placeholder="Tempel baris data dari Excel/Google Sheets di sini jika tidak mengunggah file..."></textarea>' +
+        '<textarea id="batch-paste-area" class="form-control" rows="5" placeholder="Tempel baris data dari Excel/Google Sheets di sini jika tidak mengunggah file..."></textarea>' +
       '</div>';
 
     openModal(modalTitle, html, 'Proses Impor', async function () {
@@ -2145,6 +2287,8 @@ const EduApp = (function () {
       }
 
       const targetPaketId = isSoal ? $('batch-target-paket').value : '';
+      const autoGenPwd = isUsers && $('batch-auto-gen-pwd') ? $('batch-auto-gen-pwd').checked : true;
+      const isGuruRole = String(state.user.role || '').toLowerCase() === 'guru';
       const records = [];
 
       matrix.forEach(function (cols, idx) {
@@ -2153,7 +2297,7 @@ const EduApp = (function () {
         const c5 = String(cols[5] || '').trim().toLowerCase();
 
         if (idx === 0) {
-          if (isUsers && (c0.indexOf('username') !== -1 || c0.indexOf('nisn') !== -1)) {
+          if (isUsers && (c0.indexOf('npsn') !== -1 || c1.indexOf('nisn') !== -1 || c0.indexOf('username') !== -1)) {
             return;
           }
           if (isSoal && (c0.indexOf('no_urut') !== -1 || c5 === 'pertanyaan')) {
@@ -2170,18 +2314,23 @@ const EduApp = (function () {
           }
           records.push(parseImportedSoalRow(cols, targetPaketId, records.length + 1));
         } else if (isUsers) {
-          const uname = String(cols[0] || '').trim();
-          const nama = String(cols[1] || '').trim();
-          if (!uname || !nama) {
+          const npsn = String(cols[0] || '').trim();
+          const nisn = String(cols[1] || '').trim();
+          const nama = String(cols[2] || '').trim();
+          const kelasVal = String(cols[3] || '').trim();
+          if (!nisn || !nama) {
             return;
           }
+          const finalPwd = autoGenPwd
+            ? generateAlphaNumUpperPassword(6)
+            : nisn.toUpperCase().replace(/[^A-Z0-9]/g, '');
           records.push({
-            username: uname,
+            username: nisn,
             nama_lengkap: nama,
-            kelas: String(cols[2] || '').trim(),
-            password: String(cols[3] || uname).trim(),
+            kelas: kelasVal,
+            password: finalPwd || generateAlphaNumUpperPassword(6),
             role: 'siswa',
-            sekolah_id: String(cols[4] || state.user.sekolah_id || '').trim(),
+            sekolah_id: isGuruRole ? state.user.sekolah_id : (npsn || state.user.sekolah_id || ''),
             status: 'AKTIF'
           });
         } else {
@@ -2226,22 +2375,33 @@ const EduApp = (function () {
       }
     });
 
-    $('batch-excel-file').addEventListener('change', function (ev) {
+    const dlFormatBtn = $('btn-download-template-entity');
+    if (dlFormatBtn) {
+      dlFormatBtn.addEventListener('click', function () {
+        downloadExcelTemplate(entity);
+      });
+    }
+
+    $('batch-excel-file').addEventListener('change', async function (ev) {
       const file = ev.target.files && ev.target.files[0];
       if (!file) {
         parsedFileMatrix = null;
         $('batch-file-status').textContent = '';
         return;
       }
-      if (typeof XLSX === 'undefined') {
-        showToast('Library pembaca Excel belum termuat. Segarkan halaman dan coba lagi.', 'error');
+      try {
+        $('batch-file-status').textContent = 'Membaca file Excel...';
+        await EduApi.ensureXlsxLoaded();
+      } catch (loadErr) {
+        $('batch-file-status').textContent = '';
+        showToast(loadErr.message, 'error');
         return;
       }
       const reader = new FileReader();
       reader.onload = function (e) {
         try {
           const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-          const preferredSheet = isSoal ? 'Template_Bank_Soal' : isUsers ? 'Template_Data_Siswa' : wb.SheetNames[0];
+          const preferredSheet = isSoal ? 'Format_Bank_Soal' : isUsers ? 'Format_Data_Siswa' : wb.SheetNames[0];
           const sheetName = wb.SheetNames.indexOf(preferredSheet) !== -1 ? preferredSheet : wb.SheetNames[0];
           const ws = wb.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
@@ -2738,6 +2898,8 @@ const EduApp = (function () {
     });
 
     $('btn-portal-refresh').addEventListener('click', function () {
+      EduApi.invalidatePortalCache();
+      EduApi.invalidateMasterConfigCache();
       navigatePortalTab(state.portalTab);
     });
 
