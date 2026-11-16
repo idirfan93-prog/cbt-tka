@@ -5,6 +5,7 @@ const EduApp = (function () {
     sekolahList: [],
     paketList: [],
     availableExams: [],
+    loginPrefetch: null,
     activeExam: null,
     currentQuestionIndex: 0,
     answers: {},
@@ -130,7 +131,7 @@ const EduApp = (function () {
       return 'Semua Sekolah';
     }
     if (String(sekolahId).toUpperCase() === 'PUSAT') {
-      return 'Koordinator Pusat';
+      return 'Admin';
     }
     const found = (state.sekolahList || []).find(function (s) {
       return String(s.sekolah_id) === String(sekolahId);
@@ -386,28 +387,44 @@ const EduApp = (function () {
     $('first-admin-setup-box').classList.add('hidden');
     $('standard-login-box').classList.remove('hidden');
 
-    EduApi.checkSystemStatus()
-      .then(function (status) {
-        if (status && status.needs_setup) {
-          $('first-admin-setup-box').classList.remove('hidden');
-          $('standard-login-box').classList.add('hidden');
-        }
-      })
-      .catch(function () {
-      });
+    if (localStorage.getItem('cbt_system_initialized') !== '1') {
+      EduApi.checkSystemStatus()
+        .then(function (status) {
+          if (status && status.needs_setup) {
+            $('first-admin-setup-box').classList.remove('hidden');
+            $('standard-login-box').classList.add('hidden');
+          } else if (status) {
+            localStorage.setItem('cbt_system_initialized', '1');
+          }
+        })
+        .catch(function () {
+        });
+    }
   }
 
   async function routeAuthenticatedUser() {
     const role = String(state.user.role || '').toLowerCase();
-    showLoader('Menyiapkan ruang kerja...');
+    const prefetch = state.loginPrefetch;
+    state.loginPrefetch = null;
+
+    if (!prefetch) {
+      showLoader('Menyiapkan ruang kerja...');
+    }
     try {
-      await loadMasterContext(false);
+      if (prefetch && (prefetch.konfigurasi || prefetch.sekolah)) {
+        state.masterConfig = prefetch.konfigurasi || [];
+        state.sekolahList = prefetch.sekolah || [];
+        EduApi.seedMasterConfig(state.masterConfig, state.sekolahList);
+      } else {
+        await loadMasterContext(false);
+      }
+
       if (role === 'siswa') {
         switchMainView('exam');
-        await initStudentExamEnvironment();
+        await initStudentExamEnvironment(prefetch ? prefetch.exams_payload : null);
       } else {
         switchMainView('portal');
-        await initPortalEnvironment();
+        await initPortalEnvironment(prefetch ? prefetch.dashboard : null);
       }
     } catch (err) {
       showToast(err.message, 'error');
@@ -419,7 +436,7 @@ const EduApp = (function () {
   }
 
   /* ================= STUDENT EXAM ENGINE ================= */
-  async function initStudentExamEnvironment() {
+  async function initStudentExamEnvironment(prefetchedExams) {
     $('exam-user-name').textContent = state.user.nama_lengkap || state.user.username;
     $('exam-user-class').textContent = state.user.kelas ? 'Kelas ' + state.user.kelas : resolveSekolahName(state.user.sekolah_id);
 
@@ -427,9 +444,10 @@ const EduApp = (function () {
     if (recovery.autoSubmitted && recovery.autoSubmitted.length > 0) {
       const info = recovery.autoSubmitted[0];
       showToast('Ujian "' + info.nama_ujian + '" yang tertunda saat perangkat mati telah dikirim otomatis.', 'success');
+      await loadExamLobby(null, true);
+    } else {
+      await loadExamLobby(prefetchedExams, false);
     }
-
-    await loadExamLobby();
 
     if (recovery.resumableDraft && recovery.resumableDraft.jadwal_id) {
       const targetExam = state.availableExams.find(function (ex) {
@@ -463,7 +481,7 @@ const EduApp = (function () {
     });
   }
 
-  async function loadExamLobby() {
+  async function loadExamLobby(prefetchedExams, forceRefresh) {
     $('exam-lobby').classList.remove('hidden');
     $('exam-workspace').classList.add('hidden');
     const fontControls = $('exam-font-controls');
@@ -472,7 +490,13 @@ const EduApp = (function () {
     }
     $('exam-header-title').textContent = 'Daftar Asesmen Tersedia';
 
-    const res = await EduApi.getAvailableExams();
+    let res = prefetchedExams;
+    if (res && Array.isArray(res.exams)) {
+      EduApi.seedAvailableExams(res);
+    } else {
+      res = await EduApi.getAvailableExams(Boolean(forceRefresh));
+    }
+
     if (res.server_time) {
       state.serverTimeOffsetMs = new Date(res.server_time).getTime() - Date.now();
     }
@@ -1115,7 +1139,7 @@ const EduApp = (function () {
     ];
   }
 
-  async function initPortalEnvironment() {
+  async function initPortalEnvironment(prefetchedDashboard) {
     const role = String(state.user.role || '').toLowerCase();
     const isAdmin = role === 'admin';
 
@@ -1125,10 +1149,10 @@ const EduApp = (function () {
     $('portal-user-name').textContent = state.user.nama_lengkap || state.user.username;
     $('portal-user-role').textContent = isAdmin ? 'Admin' : 'Guru';
     $('sidebar-user-name').textContent = state.user.nama_lengkap || (isAdmin ? 'Admin' : 'Guru');
-    $('sidebar-user-sub').textContent = state.user.nama_sekolah || (isAdmin ? 'Koordinator Pusat' : 'Sekolah');
+    $('sidebar-user-sub').textContent = state.user.nama_sekolah || (isAdmin ? 'Admin' : 'Sekolah');
 
     renderSidebarMenu();
-    await navigatePortalTab('beranda');
+    await navigatePortalTab('beranda', prefetchedDashboard);
   }
 
   function renderSidebarMenu() {
@@ -1156,7 +1180,7 @@ const EduApp = (function () {
     refreshIcons();
   }
 
-  async function navigatePortalTab(tabKey) {
+  async function navigatePortalTab(tabKey, prefetchedDashboard) {
     state.portalTab = tabKey;
     renderSidebarMenu();
 
@@ -1166,7 +1190,7 @@ const EduApp = (function () {
     if (menuObj.key === 'beranda') {
       $('tab-beranda').classList.remove('hidden');
       $('tab-crud').classList.add('hidden');
-      await loadPortalDashboard();
+      await loadPortalDashboard(prefetchedDashboard);
       return;
     }
 
@@ -1175,17 +1199,23 @@ const EduApp = (function () {
     await loadCrudModule(menuObj);
   }
 
-  async function loadPortalDashboard() {
-    showLoader('Memuat analitik dashboard...');
-    try {
-      const role = String(state.user.role || '').toLowerCase();
+  async function loadPortalDashboard(prefetchedDashboard) {
+    const role = String(state.user.role || '').toLowerCase();
+    const cacheKey = role === 'guru'
+      ? 'dash_guru_' + String(state.user.sekolah_id || 'default')
+      : 'dash_admin_' + String(state.adminFilterDays || 7);
+
+    if (prefetchedDashboard) {
+      EduApi.seedDashboardCache(
+        role,
+        role === 'guru' ? (state.user.sekolah_id || 'default') : (state.adminFilterDays || 7),
+        prefetchedDashboard
+      );
       if (role === 'guru') {
-        const dashData = await EduApi.getTeacherDashboard(state.user.sekolah_id);
-        EduDashboard.renderTeacherBeranda(dashData, navigatePortalTab);
+        EduDashboard.renderTeacherBeranda(prefetchedDashboard, navigatePortalTab);
       } else {
-        const adminData = await EduApi.getAdminDashboard(state.adminFilterDays);
         EduDashboard.renderAdminBeranda(
-          adminData,
+          prefetchedDashboard,
           navigatePortalTab,
           async function (newDays) {
             state.adminFilterDays = newDays;
@@ -1193,6 +1223,44 @@ const EduApp = (function () {
           },
           state.adminFilterDays
         );
+      }
+      return;
+    }
+
+    const isCached = EduApi.hasFreshPortalCache(cacheKey);
+    if (!isCached) {
+      showLoader('Memuat analitik dashboard...');
+    }
+    try {
+      if (role === 'guru') {
+        const dashData = await EduApi.getTeacherDashboard(state.user.sekolah_id, {
+          onBackgroundUpdate: function (freshDash) {
+            if (state.portalTab === 'beranda') {
+              EduDashboard.renderTeacherBeranda(freshDash, navigatePortalTab);
+            }
+          }
+        });
+        EduDashboard.renderTeacherBeranda(dashData, navigatePortalTab);
+      } else {
+        const renderAdmin = function (admData) {
+          EduDashboard.renderAdminBeranda(
+            admData,
+            navigatePortalTab,
+            async function (newDays) {
+              state.adminFilterDays = newDays;
+              await loadPortalDashboard();
+            },
+            state.adminFilterDays
+          );
+        };
+        const adminData = await EduApi.getAdminDashboard(state.adminFilterDays, {
+          onBackgroundUpdate: function (freshAdmin) {
+            if (state.portalTab === 'beranda') {
+              renderAdmin(freshAdmin);
+            }
+          }
+        });
+        renderAdmin(adminData);
       }
     } catch (err) {
       showToast(err.message, 'error');
@@ -1202,15 +1270,37 @@ const EduApp = (function () {
   }
 
   async function loadCrudModule(menuObj) {
-    showLoader('Memuat ' + menuObj.label + '...');
+    const isCached = EduApi.hasFreshPortalCache('entity_' + menuObj.entity);
+    if (!isCached) {
+      showLoader('Memuat ' + menuObj.label + '...');
+    }
     try {
-      await loadMasterContext(false);
-      if (menuObj.entity === 'Bank_Soal' || menuObj.entity === 'Jadwal_Ujian' || menuObj.entity === 'Hasil_Ujian') {
-        const pktRes = await EduApi.getEntityData('Paket_Ujian');
-        state.paketList = pktRes.records || [];
+      const needsPaket =
+        menuObj.entity === 'Bank_Soal' ||
+        menuObj.entity === 'Jadwal_Ujian' ||
+        menuObj.entity === 'Hasil_Ujian';
+
+      const tasks = [
+        loadMasterContext(false),
+        EduApi.getEntityData(menuObj.entity, {
+          onBackgroundUpdate: function (freshRes) {
+            if (state.portalTab === menuObj.key) {
+              state.crudRecords = freshRes.records || [];
+              applyCrudFilters();
+            }
+          }
+        })
+      ];
+
+      if (needsPaket) {
+        tasks.push(EduApi.getEntityData('Paket_Ujian'));
       }
 
-      const res = await EduApi.getEntityData(menuObj.entity);
+      const results = await Promise.all(tasks);
+      const res = results[1];
+      if (needsPaket && results[2]) {
+        state.paketList = results[2].records || [];
+      }
       state.crudRecords = res.records || [];
 
       $('crud-title').textContent = menuObj.label;
@@ -1545,12 +1635,29 @@ const EduApp = (function () {
     });
 
     tbody.querySelectorAll('[data-edit-id]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
+      btn.addEventListener('click', async function () {
         const idVal = btn.getAttribute('data-edit-id');
-        const found = state.crudRecords.find(function (r) { return String(r[idField]) === String(idVal); });
-        if (found) {
-          openEntityFormModal(entity, found);
+        let found = state.crudRecords.find(function (r) { return String(r[idField]) === String(idVal); });
+        if (!found) {
+          return;
         }
+        if (entity === 'Bank_Soal' && found.stimulus_gambar_url === '__EMBEDDED_IMAGE__') {
+          showLoader('Memuat gambar ilustrasi soal...');
+          try {
+            const fullRes = await EduApi.getEntityData('Bank_Soal', { forceRefresh: true, includeFullImages: true });
+            const fullRecord = (fullRes.records || []).find(function (r) {
+              return String(r.soal_id) === String(idVal);
+            });
+            if (fullRecord) {
+              found = fullRecord;
+            }
+          } catch (err) {
+            showToast(err.message, 'error');
+          } finally {
+            hideLoader();
+          }
+        }
+        openEntityFormModal(entity, found);
       });
     });
 
@@ -2577,10 +2684,14 @@ const EduApp = (function () {
     }
 
     let allSoal = state.portalTab === 'soal' ? state.crudRecords : [];
-    if (allSoal.length === 0) {
+    const hasEmbeddedStub = allSoal.some(function (s) {
+      return String(s.paket_id) === String(paketId) && s.stimulus_gambar_url === '__EMBEDDED_IMAGE__';
+    });
+
+    if (allSoal.length === 0 || hasEmbeddedStub) {
       showLoader('Memuat butir soal pratinjau...');
       try {
-        const res = await EduApi.getEntityData('Bank_Soal');
+        const res = await EduApi.getEntityData('Bank_Soal', { forceRefresh: true, includeFullImages: true });
         allSoal = res.records || [];
       } catch (err) {
         hideLoader();
@@ -2747,7 +2858,7 @@ const EduApp = (function () {
     $('link-forgot-password').addEventListener('click', function () {
       openModal(
         'Bantuan Kata Sandi',
-        '<p>Untuk keamanan akun peserta didik dan guru, pengaturan ulang kata sandi dilakukan melalui <strong>Guru Kelas</strong> atau <strong>Admin Kecamatan</strong> pada menu Manajemen Pengguna.</p>',
+        '<p>Untuk keamanan akun peserta didik dan guru, pengaturan ulang kata sandi dilakukan melalui <strong>Guru Kelas</strong> atau <strong>Admin</strong> pada menu Manajemen Pengguna.</p>',
         'Mengerti',
         closeModal,
         true
@@ -2763,9 +2874,9 @@ const EduApp = (function () {
           username: $('setup-username').value.trim(),
           password: $('setup-password').value
         });
+        localStorage.setItem('cbt_system_initialized', '1');
         EduApi.saveSession(res.token, res.user, true);
         state.user = res.user;
-        showToast('Akun Admin utama berhasil dibuat!', 'success');
         await routeAuthenticatedUser();
       } catch (err) {
         showToast(err.message, 'error');
@@ -2778,14 +2889,16 @@ const EduApp = (function () {
       e.preventDefault();
       const alertBox = $('login-alert');
       alertBox.classList.add('hidden');
-      showLoader('Memverifikasi kredensial...');
+      showLoader('Memverifikasi kredensial & menyiapkan ruang kerja...');
       try {
         const identifier = $('login-identifier').value.trim();
         const password = $('login-password').value;
         const remember = $('login-remember').checked;
         const res = await EduApi.login(identifier, password);
+        localStorage.setItem('cbt_system_initialized', '1');
         EduApi.saveSession(res.token, res.user, remember);
         state.user = res.user;
+        state.loginPrefetch = res;
         await routeAuthenticatedUser();
       } catch (err) {
         alertBox.textContent = err.message;
@@ -2812,7 +2925,7 @@ const EduApp = (function () {
     $('btn-refresh-exams').addEventListener('click', async function () {
       showLoader('Menyegarkan jadwal...');
       try {
-        await loadExamLobby();
+        await loadExamLobby(null, true);
       } finally {
         hideLoader();
       }
