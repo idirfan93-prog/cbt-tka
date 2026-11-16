@@ -4,8 +4,11 @@ const STORAGE_KEYS = {
   API_URL: 'cbt_edutryout_gas_url',
   SESSION: 'cbt_edutryout_session',
   MASTER_CONFIG: 'cbt_edutryout_master_cfg',
+  PORTAL_CACHE_PREFIX: 'cbt_edutryout_pcache_',
   DRAFT_PREFIX: 'cbt_edutryout_draft_'
 };
+
+const PORTAL_CACHE_TTL_MS = 90 * 1000;
 
 const EduApi = (function () {
   let syncTimerId = null;
@@ -13,6 +16,69 @@ const EduApi = (function () {
   let lifecycleBound = false;
   let hasUnsyncedChanges = false;
   let isSyncInFlight = false;
+  let xlsxLoaderPromise = null;
+
+  function getPortalCache_(subKey) {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEYS.PORTAL_CACHE_PREFIX + subKey);
+      if (!raw) {
+        return null;
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed || Date.now() - parsed.ts > PORTAL_CACHE_TTL_MS) {
+        sessionStorage.removeItem(STORAGE_KEYS.PORTAL_CACHE_PREFIX + subKey);
+        return null;
+      }
+      return parsed.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function setPortalCache_(subKey, data) {
+    try {
+      sessionStorage.setItem(
+        STORAGE_KEYS.PORTAL_CACHE_PREFIX + subKey,
+        JSON.stringify({ ts: Date.now(), data: data })
+      );
+    } catch (e) {
+    }
+  }
+
+  function invalidatePortalCache() {
+    const keysToRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.indexOf(STORAGE_KEYS.PORTAL_CACHE_PREFIX) === 0) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(function (k) {
+      sessionStorage.removeItem(k);
+    });
+  }
+
+  function ensureXlsxLoaded() {
+    if (typeof XLSX !== 'undefined') {
+      return Promise.resolve();
+    }
+    if (xlsxLoaderPromise) {
+      return xlsxLoaderPromise;
+    }
+    xlsxLoaderPromise = new Promise(function (resolve, reject) {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      script.onload = function () {
+        resolve();
+      };
+      script.onerror = function () {
+        xlsxLoaderPromise = null;
+        reject(new Error('Gagal memuat komponen Excel. Periksa koneksi internet Anda.'));
+      };
+      document.head.appendChild(script);
+    });
+    return xlsxLoaderPromise;
+  }
 
   function getApiUrl() {
     return localStorage.getItem(STORAGE_KEYS.API_URL) || DEFAULT_GAS_URL;
@@ -212,27 +278,56 @@ const EduApi = (function () {
     );
   }
 
-  function getTeacherDashboard(sekolahId) {
-    return request('getTeacherDashboard', {
+  async function getTeacherDashboard(sekolahId, forceRefresh) {
+    const cacheKey = 'dash_guru_' + String(sekolahId || 'default');
+    if (!forceRefresh) {
+      const cached = getPortalCache_(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+    const data = await request('getTeacherDashboard', {
       sekolah_id: sekolahId || ''
     });
+    setPortalCache_(cacheKey, data);
+    return data;
   }
 
-  function getAdminDashboard(filterHari) {
-    return request('getAdminDashboard', {
+  async function getAdminDashboard(filterHari, forceRefresh) {
+    const cacheKey = 'dash_admin_' + String(filterHari || 7);
+    if (!forceRefresh) {
+      const cached = getPortalCache_(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+    const data = await request('getAdminDashboard', {
       filter_hari: filterHari || 7
     });
+    setPortalCache_(cacheKey, data);
+    return data;
   }
 
-  function getEntityData(entity) {
-    return request('getEntityData', {
+  async function getEntityData(entity, forceRefresh) {
+    const cacheKey = 'entity_' + String(entity);
+    if (!forceRefresh) {
+      const cached = getPortalCache_(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+    const data = await request('getEntityData', {
       entity: entity
     });
+    setPortalCache_(cacheKey, data);
+    return data;
   }
 
-  function saveEntityRecord(entity, operation, payload) {
+  async function saveEntityRecord(entity, operation, payload) {
     const body = Object.assign({ entity: entity, operation: operation }, payload || {});
-    return request('saveEntityRecord', body);
+    const res = await request('saveEntityRecord', body);
+    invalidatePortalCache();
+    return res;
   }
 
   function saveGeminiConfig(apiKey, mode) {
@@ -504,6 +599,8 @@ const EduApi = (function () {
     login: login,
     getMasterConfig: getMasterConfig,
     invalidateMasterConfigCache: invalidateMasterConfigCache,
+    invalidatePortalCache: invalidatePortalCache,
+    ensureXlsxLoaded: ensureXlsxLoaded,
     getAvailableExams: getAvailableExams,
     startOrResumeExam: startOrResumeExam,
     syncProgress: syncProgress,
