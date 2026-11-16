@@ -9,6 +9,9 @@ const EduReport = (function () {
       window.print();
       return;
     }
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
     area.innerHTML = htmlContent;
     document.body.classList.add('printing-custom-sheet');
 
@@ -20,7 +23,7 @@ const EduReport = (function () {
 
     setTimeout(function () {
       window.print();
-    }, 150);
+    }, 180);
   }
 
   function getStatusBadgeClass(statusButir) {
@@ -280,13 +283,17 @@ const EduReport = (function () {
           includeJawaban: Boolean(options)
         };
 
-    const ai = report.ai_report || {
+    const rawAi = report.ai_report || {
       ringkasan_capaian: 'Peserta didik memperoleh skor akademik ' + report.hasil.skor_akademik + '.',
       kekuatan_utama: '-',
       kelemahan_miskonsepsi: '-',
       pertimbangan_pedagogis: '-',
       rekomendasi_tindak_lanjut: '-'
     };
+    const tindakLanjutClean = String(rawAi.rekomendasi_tindak_lanjut || '-').length > 360
+      ? String(rawAi.rekomendasi_tindak_lanjut).slice(0, 357) + '...'
+      : String(rawAi.rekomendasi_tindak_lanjut || '-');
+    const ai = Object.assign({}, rawAi, { rekomendasi_tindak_lanjut: tindakLanjutClean });
 
     const surveiText = report.hasil.skor_survei !== null && report.hasil.skor_survei !== undefined
       ? report.hasil.skor_survei + '%'
