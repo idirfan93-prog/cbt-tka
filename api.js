@@ -8,7 +8,9 @@ const STORAGE_KEYS = {
   DRAFT_PREFIX: 'cbt_edutryout_draft_'
 };
 
-const PORTAL_CACHE_TTL_MS = 90 * 1000;
+const MASTER_CONFIG_TTL_MS = 20 * 60 * 1000;
+const PORTAL_SOFT_TTL_MS = 35 * 1000;
+const PORTAL_HARD_TTL_MS = 5 * 60 * 1000;
 
 const EduApi = (function () {
   let syncTimerId = null;
@@ -18,21 +20,33 @@ const EduApi = (function () {
   let isSyncInFlight = false;
   let xlsxLoaderPromise = null;
 
-  function getPortalCache_(subKey) {
+  function getPortalCacheEntry_(subKey) {
     try {
       const raw = sessionStorage.getItem(STORAGE_KEYS.PORTAL_CACHE_PREFIX + subKey);
       if (!raw) {
         return null;
       }
       const parsed = JSON.parse(raw);
-      if (!parsed || Date.now() - parsed.ts > PORTAL_CACHE_TTL_MS) {
+      if (!parsed || !parsed.ts) {
         sessionStorage.removeItem(STORAGE_KEYS.PORTAL_CACHE_PREFIX + subKey);
         return null;
       }
-      return parsed.data;
+      const ageMs = Date.now() - parsed.ts;
+      if (ageMs > PORTAL_HARD_TTL_MS) {
+        sessionStorage.removeItem(STORAGE_KEYS.PORTAL_CACHE_PREFIX + subKey);
+        return null;
+      }
+      return {
+        data: parsed.data,
+        isStale: ageMs > PORTAL_SOFT_TTL_MS
+      };
     } catch (e) {
       return null;
     }
+  }
+
+  function hasFreshPortalCache(subKey) {
+    return getPortalCacheEntry_(subKey) !== null;
   }
 
   function setPortalCache_(subKey, data) {
@@ -45,7 +59,11 @@ const EduApi = (function () {
     }
   }
 
-  function invalidatePortalCache() {
+  function invalidatePortalCache(specificSubKey) {
+    if (specificSubKey) {
+      sessionStorage.removeItem(STORAGE_KEYS.PORTAL_CACHE_PREFIX + specificSubKey);
+      return;
+    }
     const keysToRemove = [];
     for (let i = 0; i < sessionStorage.length; i++) {
       const k = sessionStorage.key(i);
@@ -122,7 +140,9 @@ const EduApi = (function () {
   function clearSession() {
     localStorage.removeItem(STORAGE_KEYS.SESSION);
     sessionStorage.removeItem(STORAGE_KEYS.SESSION);
+    localStorage.removeItem(STORAGE_KEYS.MASTER_CONFIG);
     sessionStorage.removeItem(STORAGE_KEYS.MASTER_CONFIG);
+    invalidatePortalCache();
   }
 
   async function request(action, data, options) {
@@ -221,32 +241,66 @@ const EduApi = (function () {
     });
   }
 
+  function seedMasterConfig(konfigurasi, sekolah) {
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.MASTER_CONFIG,
+        JSON.stringify({
+          ts: Date.now(),
+          data: {
+            konfigurasi: konfigurasi || [],
+            sekolah: sekolah || []
+          }
+        })
+      );
+    } catch (e) {
+    }
+  }
+
   async function getMasterConfig(forceRefresh) {
     if (!forceRefresh) {
-      const cached = sessionStorage.getItem(STORAGE_KEYS.MASTER_CONFIG);
-      if (cached) {
+      const raw = localStorage.getItem(STORAGE_KEYS.MASTER_CONFIG);
+      if (raw) {
         try {
-          return JSON.parse(cached);
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.ts && Date.now() - parsed.ts <= MASTER_CONFIG_TTL_MS && parsed.data) {
+            return parsed.data;
+          }
         } catch (e) {
-          sessionStorage.removeItem(STORAGE_KEYS.MASTER_CONFIG);
+          localStorage.removeItem(STORAGE_KEYS.MASTER_CONFIG);
         }
       }
     }
     const data = await request('getMasterConfig', {});
-    sessionStorage.setItem(STORAGE_KEYS.MASTER_CONFIG, JSON.stringify(data));
+    seedMasterConfig(data.konfigurasi, data.sekolah);
     return data;
   }
 
   function invalidateMasterConfigCache() {
+    localStorage.removeItem(STORAGE_KEYS.MASTER_CONFIG);
     sessionStorage.removeItem(STORAGE_KEYS.MASTER_CONFIG);
   }
 
-  function getAvailableExams() {
-    return request('getAvailableExams', {});
+  function seedAvailableExams(examsPayload) {
+    if (examsPayload && Array.isArray(examsPayload.exams)) {
+      setPortalCache_('exams_lobby', examsPayload);
+    }
   }
 
-  function startOrResumeExam(jadwalId, tokenUjian) {
-    return requestWithRetry_(
+  async function getAvailableExams(forceRefresh) {
+    if (!forceRefresh) {
+      const entry = getPortalCacheEntry_('exams_lobby');
+      if (entry && !entry.isStale) {
+        return entry.data;
+      }
+    }
+    const data = await request('getAvailableExams', {});
+    setPortalCache_('exams_lobby', data);
+    return data;
+  }
+
+  async function startOrResumeExam(jadwalId, tokenUjian) {
+    const res = await requestWithRetry_(
       'startOrResumeExam',
       {
         jadwal_id: jadwalId,
@@ -254,6 +308,8 @@ const EduApi = (function () {
       },
       { maxAttempts: 4 }
     );
+    invalidatePortalCache('exams_lobby');
+    return res;
   }
 
   function syncProgress(jadwalId, jawabanObj, options) {
@@ -267,8 +323,8 @@ const EduApi = (function () {
     );
   }
 
-  function submitExam(jadwalId, jawabanObj, options) {
-    return requestWithRetry_(
+  async function submitExam(jadwalId, jawabanObj, options) {
+    const res = await requestWithRetry_(
       'submitExam',
       {
         jadwal_id: jadwalId,
@@ -276,51 +332,86 @@ const EduApi = (function () {
       },
       Object.assign({ maxAttempts: 4 }, options || {})
     );
+    invalidatePortalCache('exams_lobby');
+    return res;
   }
 
-  async function getTeacherDashboard(sekolahId, forceRefresh) {
+  function seedDashboardCache(role, keySuffix, dashboardData) {
+    if (!dashboardData) {
+      return;
+    }
+    const prefix = String(role).toLowerCase() === 'admin' ? 'dash_admin_' : 'dash_guru_';
+    setPortalCache_(prefix + String(keySuffix), dashboardData);
+  }
+
+  async function fetchWithSWR_(cacheKey, fetcherFn, options) {
+    const opts = typeof options === 'boolean' ? { forceRefresh: options } : (options || {});
+    if (!opts.forceRefresh) {
+      const entry = getPortalCacheEntry_(cacheKey);
+      if (entry) {
+        if (entry.isStale) {
+          fetcherFn()
+            .then(function (fresh) {
+              setPortalCache_(cacheKey, fresh);
+              if (typeof opts.onBackgroundUpdate === 'function') {
+                opts.onBackgroundUpdate(fresh);
+              }
+            })
+            .catch(function () {
+            });
+        }
+        return entry.data;
+      }
+    }
+    const freshData = await fetcherFn();
+    setPortalCache_(cacheKey, freshData);
+    return freshData;
+  }
+
+  function getTeacherDashboard(sekolahId, options) {
     const cacheKey = 'dash_guru_' + String(sekolahId || 'default');
-    if (!forceRefresh) {
-      const cached = getPortalCache_(cacheKey);
-      if (cached) {
-        return cached;
-      }
-    }
-    const data = await request('getTeacherDashboard', {
-      sekolah_id: sekolahId || ''
-    });
-    setPortalCache_(cacheKey, data);
-    return data;
+    return fetchWithSWR_(
+      cacheKey,
+      function () {
+        return request('getTeacherDashboard', {
+          sekolah_id: sekolahId || ''
+        });
+      },
+      options
+    );
   }
 
-  async function getAdminDashboard(filterHari, forceRefresh) {
+  function getAdminDashboard(filterHari, options) {
     const cacheKey = 'dash_admin_' + String(filterHari || 7);
-    if (!forceRefresh) {
-      const cached = getPortalCache_(cacheKey);
-      if (cached) {
-        return cached;
-      }
-    }
-    const data = await request('getAdminDashboard', {
-      filter_hari: filterHari || 7
-    });
-    setPortalCache_(cacheKey, data);
-    return data;
+    return fetchWithSWR_(
+      cacheKey,
+      function () {
+        return request('getAdminDashboard', {
+          filter_hari: filterHari || 7
+        });
+      },
+      options
+    );
   }
 
-  async function getEntityData(entity, forceRefresh) {
-    const cacheKey = 'entity_' + String(entity);
-    if (!forceRefresh) {
-      const cached = getPortalCache_(cacheKey);
-      if (cached) {
-        return cached;
-      }
+  function getEntityData(entity, options) {
+    const opts = typeof options === 'boolean' ? { forceRefresh: options } : (options || {});
+    if (opts.includeFullImages) {
+      return request('getEntityData', {
+        entity: entity,
+        include_full_images: true
+      });
     }
-    const data = await request('getEntityData', {
-      entity: entity
-    });
-    setPortalCache_(cacheKey, data);
-    return data;
+    const cacheKey = 'entity_' + String(entity);
+    return fetchWithSWR_(
+      cacheKey,
+      function () {
+        return request('getEntityData', {
+          entity: entity
+        });
+      },
+      opts
+    );
   }
 
   async function saveEntityRecord(entity, operation, payload) {
@@ -597,8 +688,12 @@ const EduApi = (function () {
     checkSystemStatus: checkSystemStatus,
     setupFirstAdmin: setupFirstAdmin,
     login: login,
+    seedMasterConfig: seedMasterConfig,
     getMasterConfig: getMasterConfig,
     invalidateMasterConfigCache: invalidateMasterConfigCache,
+    hasFreshPortalCache: hasFreshPortalCache,
+    seedAvailableExams: seedAvailableExams,
+    seedDashboardCache: seedDashboardCache,
     invalidatePortalCache: invalidatePortalCache,
     ensureXlsxLoaded: ensureXlsxLoaded,
     getAvailableExams: getAvailableExams,
