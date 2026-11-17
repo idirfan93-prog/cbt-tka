@@ -312,9 +312,6 @@
       </div>
 
       <div class="portal-topbar-right">
-        <button type="button" id="btn-portal-refresh" class="icon-square-btn" title="Segarkan Data">
-          <i data-lucide="refresh-cw"></i>
-        </button>
         <div class="user-chip">
           <span class="user-chip-avatar"><i data-lucide="user"></i></span>
           <div class="user-chip-info">
@@ -322,6 +319,9 @@
             <small id="portal-user-role">Admin</small>
           </div>
         </div>
+        <button type="button" id="btn-portal-refresh" class="icon-square-btn" title="Segarkan Data">
+          <i data-lucide="refresh-cw"></i>
+        </button>
         <button type="button" id="btn-portal-logout" class="icon-square-btn danger" title="Keluar">
           <i data-lucide="log-out"></i>
         </button>
@@ -329,6 +329,7 @@
     </header>
 
     <div class="portal-body">
+      <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
       <aside id="portal-sidebar" class="portal-sidebar">
         <div class="sidebar-profile-card">
           <div class="sidebar-avatar">
