@@ -164,6 +164,12 @@ const EduApp = (function () {
     if (!trimmed) {
       return '';
     }
+    if (trimmed.indexOf('data:image/') === 0) {
+      return trimmed;
+    }
+    if (!/^https?:\/\//i.test(trimmed)) {
+      return '';
+    }
     const filePathMatch = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
     if (filePathMatch && filePathMatch[1]) {
       return 'https://drive.google.com/thumbnail?id=' + filePathMatch[1] + '&sz=w800';
@@ -2900,10 +2906,11 @@ const EduApp = (function () {
       $('btn-prev-preview').disabled = previewIdx === 0;
       $('btn-next-preview').disabled = previewIdx === paketSoal.length - 1;
 
-      const stimHtml = (s.stimulus_teks || s.stimulus_gambar_url)
+      const previewImgUrl = normalizeDriveImageUrl(s.stimulus_gambar_url);
+      const stimHtml = (s.stimulus_teks || previewImgUrl)
         ? '<div class="question-stimulus">' +
             (s.stimulus_teks ? '<div class="stimulus-passage">' + formatStimulusParagraphsHtml(s.stimulus_teks) + '</div>' : '') +
-            (s.stimulus_gambar_url ? '<figure class="stimulus-figure"><img src="' + EduDashboard.escapeHtml(normalizeDriveImageUrl(s.stimulus_gambar_url)) + '" alt="Ilustrasi Soal" /></figure>' : '') +
+            (previewImgUrl ? '<figure class="stimulus-figure"><img src="' + EduDashboard.escapeHtml(previewImgUrl) + '" alt="Ilustrasi Soal" /></figure>' : '') +
           '</div>'
         : '';
 
@@ -3071,7 +3078,7 @@ const EduApp = (function () {
       e.preventDefault();
       const alertBox = $('login-alert');
       alertBox.classList.add('hidden');
-      showLoader('Memverifikasi kredensial & menyiapkan ruang kerja...');
+      showLoader('Memverifikasi kredensial...');
       try {
         const identifier = $('login-identifier').value.trim();
         const password = $('login-password').value;
@@ -3229,10 +3236,18 @@ const EduApp = (function () {
       }
     });
 
-    $('btn-portal-refresh').addEventListener('click', function () {
-      EduApi.invalidatePortalCache();
-      EduApi.invalidateMasterConfigCache();
-      navigatePortalTab(state.portalTab);
+    $('btn-portal-refresh').addEventListener('click', async function () {
+      showLoader('Menyegarkan data terbaru dari Google Sheets...');
+      try {
+        await EduApi.clearServerCache();
+        showToast('Cache server & browser berhasil disegarkan.', 'success');
+      } catch (err) {
+        EduApi.invalidatePortalCache();
+        EduApi.invalidateMasterConfigCache();
+      } finally {
+        hideLoader();
+      }
+      await navigatePortalTab(state.portalTab);
     });
 
     $('crud-search').addEventListener('input', applyCrudFilters);
