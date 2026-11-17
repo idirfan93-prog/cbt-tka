@@ -175,6 +175,30 @@ const EduApp = (function () {
     return trimmed;
   }
 
+  function isImageLinkString(val) {
+    const s = String(val || '').trim();
+    return /^https?:\/\/(lh3\.googleusercontent\.com\/|drive\.google\.com\/|[^\s]+\.(png|jpg|jpeg|webp|gif)(\?.*)?$)/i.test(s);
+  }
+
+  function parseOptionTextAndImage(rawCell) {
+    const raw = String(rawCell || '').trim();
+    if (!raw) {
+      return { teks: '', gambar_url: '' };
+    }
+    if (isImageLinkString(raw)) {
+      return { teks: '', gambar_url: normalizeDriveImageUrl(raw) };
+    }
+    const pipeIdx = raw.lastIndexOf('|');
+    if (pipeIdx !== -1) {
+      const leftText = raw.slice(0, pipeIdx).trim();
+      const rightPart = raw.slice(pipeIdx + 1).trim();
+      if (isImageLinkString(rightPart)) {
+        return { teks: leftText, gambar_url: normalizeDriveImageUrl(rightPart) };
+      }
+    }
+    return { teks: raw, gambar_url: '' };
+  }
+
   function formatStimulusParagraphsHtml(rawText) {
     const clean = String(rawText || '').trim();
     if (!clean) {
@@ -915,16 +939,36 @@ const EduApp = (function () {
     const container = $('q-options-container');
     const tipe = String(soal.tipe_soal_kode || 'PG').toUpperCase();
     const currentAns = state.answers[soal.soal_id];
+    container.classList.remove('has-image-options');
 
     if (tipe === 'PG' || tipe === 'SURVEI') {
       const opsiList = Array.isArray(soal.opsi) ? soal.opsi : [];
+      const anyHasImg = opsiList.some(function (o) { return Boolean(o.gambar_url); });
+      if (anyHasImg && tipe === 'PG') {
+        container.classList.add('has-image-options');
+      }
+
       container.innerHTML = opsiList
         .map(function (opt, i) {
           const optId = String(opt.id);
           const isSelected = String(currentAns) === optId;
+          const imgUrl = opt.gambar_url ? normalizeDriveImageUrl(opt.gambar_url) : '';
           const badgeHtml = tipe === 'SURVEI'
             ? '<span class="option-key-badge">' + (i + 1) + '</span>'
             : '<span class="option-key-badge radio-dot"></span>';
+
+          if (imgUrl) {
+            return (
+              '<button type="button" class="option-item has-option-image' + (isSelected ? ' selected' : '') + '" data-opt-id="' + EduDashboard.escapeHtml(optId) + '">' +
+                '<div class="option-item-header">' +
+                  badgeHtml +
+                  (opt.teks ? '<span class="option-label-text">' + EduDashboard.escapeHtml(opt.teks) + '</span>' : '') +
+                '</div>' +
+                '<div class="option-item-media"><img src="' + EduDashboard.escapeHtml(imgUrl) + '" alt="Pilihan ' + EduDashboard.escapeHtml(optId) + '" /></div>' +
+              '</button>'
+            );
+          }
+
           return (
             '<button type="button" class="option-item' + (isSelected ? ' selected' : '') + '" data-opt-id="' + EduDashboard.escapeHtml(optId) + '">' +
               badgeHtml +
@@ -948,11 +992,29 @@ const EduApp = (function () {
     if (tipe === 'PGK_MCMA') {
       const opsiList = Array.isArray(soal.opsi) ? soal.opsi : [];
       const selectedArr = Array.isArray(currentAns) ? currentAns.map(String) : [];
+      const anyHasImg = opsiList.some(function (o) { return Boolean(o.gambar_url); });
+      if (anyHasImg) {
+        container.classList.add('has-image-options');
+      }
 
       container.innerHTML = opsiList
         .map(function (opt) {
           const optId = String(opt.id);
           const isSelected = selectedArr.indexOf(optId) !== -1;
+          const imgUrl = opt.gambar_url ? normalizeDriveImageUrl(opt.gambar_url) : '';
+
+          if (imgUrl) {
+            return (
+              '<button type="button" class="option-item checkbox-mode has-option-image' + (isSelected ? ' selected' : '') + '" data-mcma-id="' + EduDashboard.escapeHtml(optId) + '">' +
+                '<div class="option-item-header">' +
+                  '<span class="option-key-badge">' + (isSelected ? '✓' : '') + '</span>' +
+                  (opt.teks ? '<span class="option-label-text">' + EduDashboard.escapeHtml(opt.teks) + '</span>' : '') +
+                '</div>' +
+                '<div class="option-item-media"><img src="' + EduDashboard.escapeHtml(imgUrl) + '" alt="Pilihan ' + EduDashboard.escapeHtml(optId) + '" /></div>' +
+              '</button>'
+            );
+          }
+
           return (
             '<button type="button" class="option-item checkbox-mode' + (isSelected ? ' selected' : '') + '" data-mcma-id="' + EduDashboard.escapeHtml(optId) + '">' +
               '<span class="option-key-badge">' + (isSelected ? '✓' : '') + '</span>' +
@@ -986,18 +1048,28 @@ const EduApp = (function () {
       const cols = Array.isArray(opsiObj.kolom) && opsiObj.kolom.length > 0 ? opsiObj.kolom : ['Benar', 'Salah'];
       const rows = Array.isArray(opsiObj.baris) ? opsiObj.baris : [];
       const ansMap = currentAns && typeof currentAns === 'object' && !Array.isArray(currentAns) ? currentAns : {};
+      const allRowsImageOnly = rows.length > 0 && rows.every(function (r) { return Boolean(r.gambar_url) && !r.teks; });
+      const firstColHeader = allRowsImageOnly ? 'Gambar' : 'Pernyataan';
 
       container.innerHTML =
         '<table class="pgk-bs-table"><thead><tr>' +
-          '<th>Pernyataan</th>' +
+          '<th>' + firstColHeader + '</th>' +
           cols.map(function (c) { return '<th class="center">' + EduDashboard.escapeHtml(c) + '</th>'; }).join('') +
         '</tr></thead><tbody>' +
         rows
           .map(function (r) {
             const rowId = String(r.id);
+            const rowImg = r.gambar_url ? normalizeDriveImageUrl(r.gambar_url) : '';
+            const firstCellHtml = rowImg
+              ? '<div class="pgk-bs-statement-media">' +
+                  (r.teks ? '<span>' + EduDashboard.escapeHtml(r.teks) + '</span>' : '') +
+                  '<img src="' + EduDashboard.escapeHtml(rowImg) + '" alt="Gambar ' + EduDashboard.escapeHtml(rowId) + '" />' +
+                '</div>'
+              : EduDashboard.escapeHtml(r.teks);
+
             return (
               '<tr>' +
-                '<td>' + EduDashboard.escapeHtml(r.teks) + '</td>' +
+                '<td>' + firstCellHtml + '</td>' +
                 cols
                   .map(function (c) {
                     const checked = String(ansMap[rowId] || '') === String(c);
@@ -1155,6 +1227,17 @@ const EduApp = (function () {
     await navigatePortalTab('beranda', prefetchedDashboard);
   }
 
+  function closePortalSidebar() {
+    const sb = $('portal-sidebar');
+    const bd = $('sidebar-backdrop');
+    if (sb) {
+      sb.classList.remove('open');
+    }
+    if (bd) {
+      bd.classList.add('hidden');
+    }
+  }
+
   function renderSidebarMenu() {
     const menus = getPortalMenus(String(state.user.role || '').toLowerCase());
     const nav = $('portal-nav-menu');
@@ -1172,7 +1255,7 @@ const EduApp = (function () {
 
     nav.querySelectorAll('[data-menu-key]').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        $('portal-sidebar').classList.remove('open');
+        closePortalSidebar();
         navigatePortalTab(btn.getAttribute('data-menu-key'));
       });
     });
@@ -2093,13 +2176,28 @@ const EduApp = (function () {
 
       if (tipe === 'PG') {
         const list = Array.isArray(parsedOpsi) ? parsedOpsi : [
-          { id: 'A', teks: '' }, { id: 'B', teks: '' }, { id: 'C', teks: '' }, { id: 'D', teks: '' }
+          { id: 'A', teks: '', gambar_url: '' },
+          { id: 'B', teks: '', gambar_url: '' },
+          { id: 'C', teks: '', gambar_url: '' },
+          { id: 'D', teks: '', gambar_url: '' }
         ];
         const keyVal = parsedKunci && parsedKunci.jawaban ? parsedKunci.jawaban : 'A';
         box.innerHTML =
-          '<label>Opsi Jawaban (A - D)</label>' +
+          '<label>Opsi Jawaban (A - D — Teks dan/atau Link Gambar Google Drive)</label>' +
           list.map(function (o) {
-            return '<input class="form-control qb-pg-opt" data-oid="' + o.id + '" style="margin-bottom:6px;" placeholder="Opsi ' + o.id + '" value="' + EduDashboard.escapeHtml(o.teks || '') + '" />';
+            const oImg = normalizeDriveImageUrl(o.gambar_url || '');
+            return (
+              '<div class="qb-opt-row-card">' +
+                '<div class="qb-opt-row-top">' +
+                  '<strong style="min-width:22px;">' + o.id + '.</strong>' +
+                  '<input class="form-control qb-pg-opt" data-oid="' + o.id + '" placeholder="Teks opsi ' + o.id + ' (kosongkan jika hanya gambar)" value="' + EduDashboard.escapeHtml(o.teks || '') + '" />' +
+                '</div>' +
+                '<div class="qb-opt-row-img-bar">' +
+                  '<input class="form-control qb-opt-img-input qb-pg-img" data-oid="' + o.id + '" placeholder="Link gambar opsi ' + o.id + ' (https://lh3.googleusercontent.com/d/... atau Drive)" value="' + EduDashboard.escapeHtml(oImg) + '" />' +
+                  '<img class="qb-opt-mini-preview' + (oImg ? '' : ' hidden') + '" src="' + EduDashboard.escapeHtml(oImg) + '" alt="Opsi ' + o.id + '" />' +
+                '</div>' +
+              '</div>'
+            );
           }).join('') +
           '<label style="margin-top:6px;">Kunci Jawaban Benar</label>' +
           '<select id="qb-pg-key" class="form-control">' +
@@ -2109,36 +2207,55 @@ const EduApp = (function () {
           '</select>';
       } else if (tipe === 'PGK_MCMA') {
         const list = Array.isArray(parsedOpsi) ? parsedOpsi : [
-          { id: '1', teks: '' }, { id: '2', teks: '' }, { id: '3', teks: '' }, { id: '4', teks: '' }
+          { id: '1', teks: '', gambar_url: '' },
+          { id: '2', teks: '', gambar_url: '' },
+          { id: '3', teks: '', gambar_url: '' },
+          { id: '4', teks: '', gambar_url: '' }
         ];
         const keyArr = parsedKunci && Array.isArray(parsedKunci.jawaban) ? parsedKunci.jawaban : [];
         box.innerHTML =
-          '<label>Pilihan Jawaban (Centang semua yang benar)</label>' +
+          '<label>Pilihan Jawaban (Centang semua yang benar — Teks dan/atau Link Gambar)</label>' +
           list.map(function (o) {
             const chk = keyArr.indexOf(String(o.id)) !== -1 ? ' checked' : '';
+            const oImg = normalizeDriveImageUrl(o.gambar_url || '');
             return (
-              '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
-                '<input type="checkbox" class="qb-mcma-chk" value="' + o.id + '"' + chk + ' />' +
-                '<input class="form-control qb-mcma-opt" data-oid="' + o.id + '" placeholder="Pernyataan ' + o.id + '" value="' + EduDashboard.escapeHtml(o.teks || '') + '" />' +
+              '<div class="qb-opt-row-card">' +
+                '<div class="qb-opt-row-top">' +
+                  '<input type="checkbox" class="qb-mcma-chk" value="' + o.id + '"' + chk + ' />' +
+                  '<input class="form-control qb-mcma-opt" data-oid="' + o.id + '" placeholder="Teks pilihan ' + o.id + ' (opsional jika pakai gambar)" value="' + EduDashboard.escapeHtml(o.teks || '') + '" />' +
+                '</div>' +
+                '<div class="qb-opt-row-img-bar">' +
+                  '<input class="form-control qb-opt-img-input qb-mcma-img" data-oid="' + o.id + '" placeholder="Link gambar pilihan ' + o.id + ' (Opsional)" value="' + EduDashboard.escapeHtml(oImg) + '" />' +
+                  '<img class="qb-opt-mini-preview' + (oImg ? '' : ' hidden') + '" src="' + EduDashboard.escapeHtml(oImg) + '" alt="Pilihan ' + o.id + '" />' +
+                '</div>' +
               '</div>'
             );
           }).join('');
       } else if (tipe === 'PGK_BS') {
         const rows = parsedOpsi && Array.isArray(parsedOpsi.baris) ? parsedOpsi.baris : [
-          { id: 'P1', teks: '' }, { id: 'P2', teks: '' }, { id: 'P3', teks: '' }
+          { id: 'P1', teks: '', gambar_url: '' },
+          { id: 'P2', teks: '', gambar_url: '' },
+          { id: 'P3', teks: '', gambar_url: '' }
         ];
         const keyMap = parsedKunci && parsedKunci.jawaban ? parsedKunci.jawaban : {};
         box.innerHTML =
-          '<label>Daftar Pernyataan & Kunci (Benar / Salah)</label>' +
+          '<label>Daftar Pernyataan / Gambar & Kunci (Benar / Salah)</label>' +
           rows.map(function (r) {
             const cur = keyMap[r.id] || 'Benar';
+            const rImg = normalizeDriveImageUrl(r.gambar_url || '');
             return (
-              '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
-                '<input class="form-control qb-bs-text" data-rid="' + r.id + '" placeholder="Teks pernyataan ' + r.id + '" value="' + EduDashboard.escapeHtml(r.teks || '') + '" />' +
-                '<select class="form-control qb-bs-key" data-rid="' + r.id + '" style="width:130px;">' +
-                  '<option value="Benar"' + (cur === 'Benar' ? ' selected' : '') + '>Benar</option>' +
-                  '<option value="Salah"' + (cur === 'Salah' ? ' selected' : '') + '>Salah</option>' +
-                '</select>' +
+              '<div class="qb-opt-row-card">' +
+                '<div class="qb-opt-row-top">' +
+                  '<input class="form-control qb-bs-text" data-rid="' + r.id + '" placeholder="Teks pernyataan ' + r.id + ' (kosongkan jika hanya gambar)" value="' + EduDashboard.escapeHtml(r.teks || '') + '" />' +
+                  '<select class="form-control qb-bs-key" data-rid="' + r.id + '" style="width:130px;">' +
+                    '<option value="Benar"' + (cur === 'Benar' ? ' selected' : '') + '>Benar</option>' +
+                    '<option value="Salah"' + (cur === 'Salah' ? ' selected' : '') + '>Salah</option>' +
+                  '</select>' +
+                '</div>' +
+                '<div class="qb-opt-row-img-bar">' +
+                  '<input class="form-control qb-opt-img-input qb-bs-img" data-rid="' + r.id + '" placeholder="Link gambar ' + r.id + ' (https://lh3.googleusercontent.com/d/... atau Drive)" value="' + EduDashboard.escapeHtml(rImg) + '" />' +
+                  '<img class="qb-opt-mini-preview' + (rImg ? '' : ' hidden') + '" src="' + EduDashboard.escapeHtml(rImg) + '" alt="' + r.id + '" />' +
+                '</div>' +
               '</div>'
             );
           }).join('');
@@ -2161,6 +2278,27 @@ const EduApp = (function () {
             '<option value="NEGATIF"' + (arah === 'NEGATIF' ? ' selected' : '') + '>Negatif / Favorable Terbalik</option>' +
           '</select>';
       }
+
+      box.querySelectorAll('.qb-opt-img-input').forEach(function (inp) {
+        const syncMiniPreview = function () {
+          const converted = normalizeDriveImageUrl(inp.value);
+          if (converted !== inp.value.trim()) {
+            inp.value = converted;
+          }
+          const imgEl = inp.parentElement ? inp.parentElement.querySelector('.qb-opt-mini-preview') : null;
+          if (!imgEl) {
+            return;
+          }
+          if (converted) {
+            imgEl.src = converted;
+            imgEl.classList.remove('hidden');
+          } else {
+            imgEl.classList.add('hidden');
+          }
+        };
+        inp.addEventListener('change', syncMiniPreview);
+        inp.addEventListener('input', syncMiniPreview);
+      });
     };
 
     renderBuilderFields();
@@ -2171,7 +2309,13 @@ const EduApp = (function () {
     if (tipe === 'PG') {
       const opsi = [];
       document.querySelectorAll('.qb-pg-opt').forEach(function (inp) {
-        opsi.push({ id: inp.getAttribute('data-oid'), teks: inp.value.trim() });
+        const oid = inp.getAttribute('data-oid');
+        const imgInp = document.querySelector('.qb-pg-img[data-oid="' + oid + '"]');
+        opsi.push({
+          id: oid,
+          teks: inp.value.trim(),
+          gambar_url: imgInp ? normalizeDriveImageUrl(imgInp.value) : ''
+        });
       });
       return {
         opsi: opsi,
@@ -2183,7 +2327,13 @@ const EduApp = (function () {
       const opsi = [];
       const jawaban = [];
       document.querySelectorAll('.qb-mcma-opt').forEach(function (inp) {
-        opsi.push({ id: inp.getAttribute('data-oid'), teks: inp.value.trim() });
+        const oid = inp.getAttribute('data-oid');
+        const imgInp = document.querySelector('.qb-mcma-img[data-oid="' + oid + '"]');
+        opsi.push({
+          id: oid,
+          teks: inp.value.trim(),
+          gambar_url: imgInp ? normalizeDriveImageUrl(imgInp.value) : ''
+        });
       });
       document.querySelectorAll('.qb-mcma-chk:checked').forEach(function (chk) {
         jawaban.push(chk.value);
@@ -2199,8 +2349,11 @@ const EduApp = (function () {
       const jawaban = {};
       document.querySelectorAll('.qb-bs-text').forEach(function (inp) {
         const rid = inp.getAttribute('data-rid');
-        if (inp.value.trim()) {
-          baris.push({ id: rid, teks: inp.value.trim() });
+        const imgInp = document.querySelector('.qb-bs-img[data-rid="' + rid + '"]');
+        const teksVal = inp.value.trim();
+        const imgVal = imgInp ? normalizeDriveImageUrl(imgInp.value) : '';
+        if (teksVal || imgVal) {
+          baris.push({ id: rid, teks: teksVal, gambar_url: imgVal });
           const sel = document.querySelector('.qb-bs-key[data-rid="' + rid + '"]');
           jawaban[rid] = sel ? sel.value : 'Benar';
         }
@@ -2243,16 +2396,18 @@ const EduApp = (function () {
     if (tipe === 'PG') {
       const letters = ['A', 'B', 'C', 'D'];
       opsiObj = letters.map(function (ltr, idx) {
-        return { id: ltr, teks: rawOpts[idx] || '' };
+        const parsed = parseOptionTextAndImage(rawOpts[idx]);
+        return { id: ltr, teks: parsed.teks, gambar_url: parsed.gambar_url };
       });
       kunciObj = { jawaban: (kunciRaw || 'A').toUpperCase() };
     } else if (tipe === 'PGK_MCMA') {
       opsiObj = rawOpts
         .map(function (txt, idx) {
-          return { id: String(idx + 1), teks: txt };
+          const parsed = parseOptionTextAndImage(txt);
+          return { id: String(idx + 1), teks: parsed.teks, gambar_url: parsed.gambar_url };
         })
         .filter(function (o) {
-          return o.teks !== '';
+          return o.teks !== '' || o.gambar_url !== '';
         });
       const ansArr = kunciRaw
         .split(',')
@@ -2268,9 +2423,10 @@ const EduApp = (function () {
         return s.trim();
       });
       rawOpts.forEach(function (txt, idx) {
-        if (txt !== '') {
+        const parsed = parseOptionTextAndImage(txt);
+        if (parsed.teks !== '' || parsed.gambar_url !== '') {
           const pid = 'P' + (idx + 1);
-          baris.push({ id: pid, teks: txt });
+          baris.push({ id: pid, teks: parsed.teks, gambar_url: parsed.gambar_url });
           const rawAns = String(keyParts[idx] || 'Benar').toLowerCase();
           ansMap[pid] = rawAns === 'salah' || rawAns === 's' ? 'Salah' : 'Benar';
         }
@@ -2752,12 +2908,24 @@ const EduApp = (function () {
         : '';
 
       let optsHtml = '';
+      const hasPreviewOptImg = Array.isArray(opsiParsed) && opsiParsed.some(function (o) { return Boolean(o.gambar_url); });
+      const optsWrapClass = hasPreviewOptImg && (tipe === 'PG' || tipe === 'PGK_MCMA') ? 'options-wrapper has-image-options' : 'options-wrapper';
+
       if (tipe === 'PG' || tipe === 'SURVEI') {
         optsHtml = (Array.isArray(opsiParsed) ? opsiParsed : [])
           .map(function (o, i) {
             const badgeHtml = tipe === 'SURVEI'
               ? '<span class="option-key-badge">' + (i + 1) + '</span>'
               : '<span class="option-key-badge radio-dot"></span>';
+            const imgUrl = o.gambar_url ? normalizeDriveImageUrl(o.gambar_url) : '';
+            if (imgUrl) {
+              return (
+                '<div class="option-item has-option-image">' +
+                  '<div class="option-item-header">' + badgeHtml + (o.teks ? '<span class="option-label-text">' + EduDashboard.escapeHtml(o.teks) + '</span>' : '') + '</div>' +
+                  '<div class="option-item-media"><img src="' + EduDashboard.escapeHtml(imgUrl) + '" alt="Opsi ' + EduDashboard.escapeHtml(o.id) + '" /></div>' +
+                '</div>'
+              );
+            }
             return (
               '<div class="option-item">' +
                 badgeHtml +
@@ -2769,6 +2937,15 @@ const EduApp = (function () {
       } else if (tipe === 'PGK_MCMA') {
         optsHtml = (Array.isArray(opsiParsed) ? opsiParsed : [])
           .map(function (o) {
+            const imgUrl = o.gambar_url ? normalizeDriveImageUrl(o.gambar_url) : '';
+            if (imgUrl) {
+              return (
+                '<div class="option-item checkbox-mode has-option-image">' +
+                  '<div class="option-item-header"><span class="option-key-badge"></span>' + (o.teks ? '<span class="option-label-text">' + EduDashboard.escapeHtml(o.teks) + '</span>' : '') + '</div>' +
+                  '<div class="option-item-media"><img src="' + EduDashboard.escapeHtml(imgUrl) + '" alt="Pilihan ' + EduDashboard.escapeHtml(o.id) + '" /></div>' +
+                '</div>'
+              );
+            }
             return (
               '<div class="option-item checkbox-mode">' +
                 '<span class="option-key-badge"></span>' +
@@ -2780,12 +2957,17 @@ const EduApp = (function () {
       } else if (tipe === 'PGK_BS') {
         const cols = opsiParsed && Array.isArray(opsiParsed.kolom) ? opsiParsed.kolom : ['Benar', 'Salah'];
         const rows = opsiParsed && Array.isArray(opsiParsed.baris) ? opsiParsed.baris : [];
+        const allImgRows = rows.length > 0 && rows.every(function (r) { return Boolean(r.gambar_url) && !r.teks; });
         optsHtml =
-          '<table class="pgk-bs-table"><thead><tr><th>Pernyataan</th>' +
+          '<table class="pgk-bs-table"><thead><tr><th>' + (allImgRows ? 'Gambar' : 'Pernyataan') + '</th>' +
           cols.map(function (c) { return '<th class="center">' + EduDashboard.escapeHtml(c) + '</th>'; }).join('') +
           '</tr></thead><tbody>' +
           rows.map(function (r) {
-            return '<tr><td>' + EduDashboard.escapeHtml(r.teks) + '</td>' +
+            const rImg = r.gambar_url ? normalizeDriveImageUrl(r.gambar_url) : '';
+            const cellContent = rImg
+              ? '<div class="pgk-bs-statement-media">' + (r.teks ? '<span>' + EduDashboard.escapeHtml(r.teks) + '</span>' : '') + '<img src="' + EduDashboard.escapeHtml(rImg) + '" alt="' + EduDashboard.escapeHtml(r.id) + '" /></div>'
+              : EduDashboard.escapeHtml(r.teks);
+            return '<tr><td>' + cellContent + '</td>' +
               cols.map(function () { return '<td class="center"><input type="radio" class="pgk-radio" disabled /></td>'; }).join('') +
               '</tr>';
           }).join('') +
@@ -2802,7 +2984,7 @@ const EduApp = (function () {
         '</div>' +
         stimHtml +
         '<div class="question-stem">' + EduDashboard.escapeHtml(s.pertanyaan || '') + '</div>' +
-        '<div class="options-wrapper">' + optsHtml + '</div>';
+        '<div class="' + optsWrapClass + '">' + optsHtml + '</div>';
     };
 
     $('btn-prev-preview').addEventListener('click', function () {
@@ -2994,7 +3176,22 @@ const EduApp = (function () {
       );
     });
 
+    
+    const togglePortalSidebar = function () {
+      const sb = $('portal-sidebar');
+      const bd = $('sidebar-backdrop');
+      if (!sb) {
+        return;
+      }
+      const willOpen = !sb.classList.contains('open');
+      sb.classList.toggle('open', willOpen);
+      if (bd) {
+        bd.classList.toggle('hidden', !willOpen);
+      }
+    };
+
     const handleLogout = function () {
+      closePortalSidebar();
       stopExamCountdown();
       EduApi.ExamStorage.stopHybridCheckpoint();
       EduApi.clearSession();
@@ -3006,8 +3203,30 @@ const EduApp = (function () {
     $('btn-exam-logout').addEventListener('click', handleLogout);
     $('btn-portal-logout').addEventListener('click', handleLogout);
 
-    $('btn-sidebar-toggle').addEventListener('click', function () {
-      $('portal-sidebar').classList.toggle('open');
+    $('btn-sidebar-toggle').addEventListener('click', function (e) {
+      e.stopPropagation();
+      togglePortalSidebar();
+    });
+
+    if ($('sidebar-backdrop')) {
+      $('sidebar-backdrop').addEventListener('click', closePortalSidebar);
+    }
+
+    document.addEventListener('click', function (e) {
+      const sb = $('portal-sidebar');
+      const toggleBtn = $('btn-sidebar-toggle');
+      if (!sb || !sb.classList.contains('open')) {
+        return;
+      }
+      if (!sb.contains(e.target) && (!toggleBtn || !toggleBtn.contains(e.target))) {
+        closePortalSidebar();
+      }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        closePortalSidebar();
+      }
     });
 
     $('btn-portal-refresh').addEventListener('click', function () {
