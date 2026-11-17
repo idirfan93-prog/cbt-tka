@@ -564,6 +564,24 @@
   font-weight: 700;
 }
 
+.ak-option-media {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ak-option-media img,
+.report-inline-thumb {
+  max-width: 160px;
+  max-height: 95px;
+  object-fit: contain;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  background: #ffffff;
+  padding: 2px;
+  display: block;
+}
+
 .ak-key-pill {
   background: #10b981;
   color: #ffffff;
