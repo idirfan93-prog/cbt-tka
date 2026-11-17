@@ -892,9 +892,13 @@ const EduReport = (function () {
         const keyId = String((s.kunci && s.kunci.jawaban) || '').toUpperCase();
         optionsHtml = '<div class="ak-options-list">' + (Array.isArray(s.opsi) ? s.opsi : []).map(function (o) {
           const isKey = String(o.id).toUpperCase() === keyId;
+          const oImg = o.gambar_url ? normalizePrintImageUrl(o.gambar_url) : '';
+          const labelBody = oImg
+            ? '<div class="ak-option-media"><span><strong>' + esc(o.id) + '.</strong> ' + esc(o.teks || '') + '</span><img src="' + esc(oImg) + '" alt="Opsi ' + esc(o.id) + '" /></div>'
+            : '<span><strong>' + esc(o.id) + '.</strong> ' + esc(o.teks) + '</span>';
           return (
             '<div class="ak-option-row' + (isKey ? ' is-key' : '') + '">' +
-              '<span><strong>' + esc(o.id) + '.</strong> ' + esc(o.teks) + '</span>' +
+              labelBody +
               (isKey ? '<span class="ak-key-pill">✓ Kunci Jawaban</span>' : '') +
             '</div>'
           );
@@ -903,9 +907,13 @@ const EduReport = (function () {
         const keyArr = s.kunci && Array.isArray(s.kunci.jawaban) ? s.kunci.jawaban.map(String) : [];
         optionsHtml = '<div class="ak-options-list">' + (Array.isArray(s.opsi) ? s.opsi : []).map(function (o) {
           const isKey = keyArr.indexOf(String(o.id)) !== -1;
+          const oImg = o.gambar_url ? normalizePrintImageUrl(o.gambar_url) : '';
+          const labelBody = oImg
+            ? '<div class="ak-option-media"><span><strong>[' + esc(o.id) + ']</strong> ' + esc(o.teks || '') + '</span><img src="' + esc(oImg) + '" alt="Pilihan ' + esc(o.id) + '" /></div>'
+            : '<span><strong>[' + esc(o.id) + ']</strong> ' + esc(o.teks) + '</span>';
           return (
             '<div class="ak-option-row' + (isKey ? ' is-key' : '') + '">' +
-              '<span><strong>[' + esc(o.id) + ']</strong> ' + esc(o.teks) + '</span>' +
+              labelBody +
               (isKey ? '<span class="ak-key-pill">✓ Jawaban Benar</span>' : '') +
             '</div>'
           );
@@ -913,12 +921,17 @@ const EduReport = (function () {
       } else if (tipe === 'PGK_BS') {
         const rows = s.opsi && Array.isArray(s.opsi.baris) ? s.opsi.baris : [];
         const kMap = s.kunci && s.kunci.jawaban ? s.kunci.jawaban : {};
+        const allImgRows = rows.length > 0 && rows.every(function (r) { return Boolean(r.gambar_url) && !r.teks; });
         optionsHtml =
           '<table class="print-data-table" style="margin-bottom:0;"><thead><tr>' +
-            '<th>Pernyataan</th><th style="width:22%;">Kunci Jawaban</th>' +
+            '<th>' + (allImgRows ? 'Gambar' : 'Pernyataan') + '</th><th style="width:22%;">Kunci Jawaban</th>' +
           '</tr></thead><tbody>' +
           rows.map(function (r) {
-            return '<tr><td>' + esc(r.teks) + '</td><td><strong>' + esc(kMap[r.id] || '-') + '</strong></td></tr>';
+            const rImg = r.gambar_url ? normalizePrintImageUrl(r.gambar_url) : '';
+            const cellBody = rImg
+              ? '<div class="ak-option-media">' + (r.teks ? '<span>' + esc(r.teks) + '</span>' : '') + '<img src="' + esc(rImg) + '" alt="' + esc(r.id) + '" /></div>'
+              : esc(r.teks);
+            return '<tr><td>' + cellBody + '</td><td><strong>' + esc(kMap[r.id] || '-') + '</strong></td></tr>';
           }).join('') +
           '</tbody></table>';
       } else {
