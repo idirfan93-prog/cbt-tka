@@ -460,6 +460,12 @@ const EduApi = (function () {
     });
   }
 
+  function clearServerCache() {
+    invalidatePortalCache();
+    invalidateMasterConfigCache();
+    return request('clearServerCache', {});
+  }
+
   const ExamStorage = {
     buildKey: function (userId, jadwalId) {
       return STORAGE_KEYS.DRAFT_PREFIX + String(userId) + '_' + String(jadwalId);
@@ -710,6 +716,7 @@ const EduApi = (function () {
     getClassItemAnalysis: getClassItemAnalysis,
     getPrintableAnswerKey: getPrintableAnswerKey,
     forceFinishExamSession: forceFinishExamSession,
+    clearServerCache: clearServerCache,
     ExamStorage: ExamStorage
   };
 })();
