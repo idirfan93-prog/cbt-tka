@@ -17,8 +17,10 @@ const EduApp = (function () {
     passedPhaseBreaks: {},
     surveyPhaseStarted: false,
     portalTab: 'beranda',
-    adminFilterDays: 7,
     crudRecords: [],
+    crudSearch: '',
+    crudFilterVal: '',
+    adminFilterDays: 7,
     modalSaveHandler: null
   };
 
@@ -1285,6 +1287,8 @@ const EduApp = (function () {
 
     $('tab-beranda').classList.add('hidden');
     $('tab-crud').classList.remove('hidden');
+    state.crudSearch = '';
+    state.crudFilterVal = '';
     await loadCrudModule(menuObj);
   }
 
@@ -1394,7 +1398,7 @@ const EduApp = (function () {
 
       $('crud-title').textContent = menuObj.label;
       $('crud-subtitle').textContent = getCrudSubtitle(menuObj.entity);
-      $('crud-search').value = '';
+      $('crud-search').value = state.crudSearch || '';
 
       const addBtn = $('btn-crud-add');
       const importBtn = $('btn-crud-import');
@@ -1437,7 +1441,7 @@ const EduApp = (function () {
       }
 
       setupCrudFilter(menuObj.entity, filterSel);
-      renderCrudTable(menuObj.entity, state.crudRecords);
+      applyCrudFilters();
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -1500,6 +1504,19 @@ const EduApp = (function () {
         '<option value="admin">Admin</option>';
     } else {
       filterSel.innerHTML = '';
+      state.crudFilterVal = '';
+      return;
+    }
+
+    if (state.crudFilterVal) {
+      const hasOption = Array.prototype.some.call(filterSel.options, function (opt) {
+        return String(opt.value) === String(state.crudFilterVal);
+      });
+      if (hasOption) {
+        filterSel.value = state.crudFilterVal;
+      } else {
+        state.crudFilterVal = '';
+      }
     }
   }
 
@@ -1512,6 +1529,8 @@ const EduApp = (function () {
 
     const q = $('crud-search').value.trim().toLowerCase();
     const filterVal = $('crud-filter').value;
+    state.crudSearch = $('crud-search').value;
+    state.crudFilterVal = filterVal;
 
     const filtered = state.crudRecords.filter(function (row) {
       if (menuObj.entity === 'Master_Konfigurasi' && filterVal && row.tipe_config !== filterVal) {
@@ -1726,25 +1745,13 @@ const EduApp = (function () {
     tbody.querySelectorAll('[data-edit-id]').forEach(function (btn) {
       btn.addEventListener('click', async function () {
         const idVal = btn.getAttribute('data-edit-id');
-        let found = state.crudRecords.find(function (r) { return String(r[idField]) === String(idVal); });
+        const found = state.crudRecords.find(function (r) { return String(r[idField]) === String(idVal); });
         if (!found) {
           return;
         }
-        if (entity === 'Bank_Soal' && found.stimulus_gambar_url === '__EMBEDDED_IMAGE__') {
-          showLoader('Memuat gambar ilustrasi soal...');
-          try {
-            const fullRes = await EduApi.getEntityData('Bank_Soal', { forceRefresh: true, includeFullImages: true });
-            const fullRecord = (fullRes.records || []).find(function (r) {
-              return String(r.soal_id) === String(idVal);
-            });
-            if (fullRecord) {
-              found = fullRecord;
-            }
-          } catch (err) {
-            showToast(err.message, 'error');
-          } finally {
-            hideLoader();
-          }
+        if (entity === 'Bank_Soal') {
+          await openQuestionRecordForEdit(found);
+          return;
         }
         openEntityFormModal(entity, found);
       });
@@ -2026,10 +2033,67 @@ const EduApp = (function () {
     }
   }
 
+  async function openQuestionRecordForEdit(targetRec) {
+    if (!targetRec) {
+      return;
+    }
+    let resolved = targetRec;
+    if (resolved.stimulus_gambar_url === '__EMBEDDED_IMAGE__') {
+      showLoader('Memuat gambar ilustrasi soal...');
+      try {
+        const fullRes = await EduApi.getEntityData('Bank_Soal', { forceRefresh: true, includeFullImages: true });
+        const fullRecord = (fullRes.records || []).find(function (r) {
+          return String(r.soal_id) === String(resolved.soal_id);
+        });
+        if (fullRecord) {
+          resolved = fullRecord;
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        hideLoader();
+      }
+    }
+    openQuestionBuilderModal(true, resolved);
+  }
+
   function openQuestionBuilderModal(isEdit, rec) {
+    const activePaketId = rec.paket_id || state.crudFilterVal || (state.paketList[0] ? state.paketList[0].paket_id : '');
+    const paketObj = state.paketList.find(function (p) {
+      return String(p.paket_id) === String(activePaketId);
+    });
+    const paketLabel = paketObj ? paketObj.nama_ujian : activePaketId;
+
+    const siblings = isEdit
+      ? (state.crudRecords || [])
+          .filter(function (item) {
+            return String(item.paket_id) === String(activePaketId);
+          })
+          .sort(function (a, b) {
+            return (Number(a.no_urut) || 0) - (Number(b.no_urut) || 0);
+          })
+      : [];
+
+    const currentSibIdx = isEdit
+      ? siblings.findIndex(function (item) {
+          return String(item.soal_id) === String(rec.soal_id);
+        })
+      : -1;
+
+    const navBarHtml = isEdit && siblings.length > 0 && currentSibIdx !== -1
+      ? '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;">' +
+          '<div style="font-size:0.85rem;color:#1e3a8a;"><strong>Navigasi Butir Soal</strong> • ' + EduDashboard.escapeHtml(paketLabel) + '</div>' +
+          '<div style="display:flex;gap:6px;align-items:center;">' +
+            '<button type="button" id="btn-prev-edit-soal" class="btn-outline-sm"' + (currentSibIdx <= 0 ? ' disabled' : '') + '>‹ Sebelumnya</button>' +
+            '<span style="font-size:0.84rem;font-weight:700;padding:0 6px;color:#0f172a;">' + (currentSibIdx + 1) + ' / ' + siblings.length + '</span>' +
+            '<button type="button" id="btn-next-edit-soal" class="btn-outline-sm"' + (currentSibIdx >= siblings.length - 1 ? ' disabled' : '') + '>Berikutnya ›</button>' +
+          '</div>' +
+        '</div>'
+      : '';
+
     const pktOpts = state.paketList
       .map(function (p) {
-        return '<option value="' + EduDashboard.escapeHtml(p.paket_id) + '"' + (rec.paket_id === p.paket_id ? ' selected' : '') + '>' + EduDashboard.escapeHtml(p.nama_ujian) + '</option>';
+        return '<option value="' + EduDashboard.escapeHtml(p.paket_id) + '"' + (String(activePaketId) === String(p.paket_id) ? ' selected' : '') + '>' + EduDashboard.escapeHtml(p.nama_ujian) + '</option>';
       })
       .join('');
 
@@ -2051,6 +2115,7 @@ const EduApp = (function () {
     const initialImgUrl = normalizeDriveImageUrl(rec.stimulus_gambar_url || '');
 
     const html =
+      navBarHtml +
       '<div class="form-grid">' +
         '<div class="form-group"><label>Paket Ujian</label><select id="q-paket_id" class="form-control">' + pktOpts + '</select></div>' +
         '<div class="form-group"><label>Nomor Urut</label><input type="number" id="q-no_urut" class="form-control" value="' + EduDashboard.escapeHtml(rec.no_urut || (state.crudRecords.length + 1)) + '" /></div>' +
@@ -2098,8 +2163,47 @@ const EduApp = (function () {
         showToast('Pertanyaan wajib diisi.', 'warning');
         return;
       }
-      await submitCrudSave('Bank_Soal', isEdit ? 'update' : 'create', payload);
+
+      if (isEdit) {
+        showLoader('Menyimpan perubahan soal...');
+        try {
+          const res = await EduApi.saveEntityRecord('Bank_Soal', 'update', { record: payload });
+          const updatedRec = Object.assign({}, rec, payload, (res && res.record) ? res.record : {});
+          const targetIdx = state.crudRecords.findIndex(function (item) {
+            return String(item.soal_id) === String(rec.soal_id);
+          });
+          if (targetIdx !== -1) {
+            state.crudRecords[targetIdx] = updatedRec;
+          }
+          rec = updatedRec;
+          applyCrudFilters();
+          showToast('Soal No. ' + payload.no_urut + ' berhasil disimpan.', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        } finally {
+          hideLoader();
+        }
+        return;
+      }
+
+      await submitCrudSave('Bank_Soal', 'create', payload);
     });
+
+    if ($('btn-prev-edit-soal')) {
+      $('btn-prev-edit-soal').addEventListener('click', function () {
+        if (currentSibIdx > 0) {
+          openQuestionRecordForEdit(siblings[currentSibIdx - 1]);
+        }
+      });
+    }
+
+    if ($('btn-next-edit-soal')) {
+      $('btn-next-edit-soal').addEventListener('click', function () {
+        if (currentSibIdx < siblings.length - 1) {
+          openQuestionRecordForEdit(siblings[currentSibIdx + 1]);
+        }
+      });
+    }
 
     const urlInput = $('q-stimulus_gambar_url');
     const previewBox = $('q-image-preview-box');
