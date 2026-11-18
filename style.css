@@ -2033,26 +2033,6 @@ textarea {
     justify-self: end;
     max-width: 145px;
   }
-  .portal-topbar {
-    width: 100%;
-    max-width: 100vw;
-    height: auto;
-    min-height: 54px;
-    padding: 8px 10px;
-    gap: 6px;
-    flex-wrap: nowrap;
-    overflow: hidden;
-  }
-  .portal-topbar-left {
-    flex: 1 1 auto;
-    min-width: 0;
-    gap: 6px;
-    overflow: hidden;
-  }
-  .portal-topbar-right {
-    flex: 0 0 auto;
-    gap: 5px;
-  }
   .topbar-brand {
     font-size: 1rem;
     gap: 6px;
@@ -2212,8 +2192,10 @@ textarea {
     min-width: 0;
   }
   .portal-topbar-right {
+    width: auto;
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 5px;
     flex-shrink: 0;
   }
@@ -2225,17 +2207,17 @@ textarea {
     display: none;
   }
   .portal-topbar .topbar-brand {
-    font-size: 0.94rem;
+    font-size: 0.92rem;
     gap: 5px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .portal-topbar .user-chip {
-    max-width: 112px;
+    max-width: 108px;
   }
   .portal-topbar .user-chip-info strong {
-    max-width: 72px;
+    max-width: 68px;
   }
   .sidebar-backdrop {
     position: fixed;
@@ -2393,11 +2375,6 @@ textarea {
 }
 
 @media (max-width: 768px) {
-  .exam-topbar-right,
-  .portal-topbar-right {
-    width: 100%;
-    justify-content: space-between;
-  }
   .btn-nav-secondary,
   .btn-nav-primary,
   .btn-nav-finish,
